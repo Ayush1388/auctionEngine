@@ -13,15 +13,7 @@ func NewPostgresPool(databaseURL string) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 
-	config.MaxConns = 25
-	config.MinConns = 5
-	config.MaxConnLifetime = time.Hour
-	config.MaxConnIdleTime = 30 * time.Minute
-
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		5*time.Second,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
@@ -35,4 +27,5 @@ func NewPostgresPool(databaseURL string) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
+
 }

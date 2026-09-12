@@ -1,0 +1,72 @@
+"postgres://auction:auction@localhost:5432/auction..."
+                         │
+                         ▼
+                ParseConfig()
+                         │
+                         ▼
+              pgxpool.Config
+              ├── host: localhost
+              ├── port: 5432
+              ├── user: auction
+              ├── password: auction
+              └── database: auction
+              config, err := pgxpool.ParseConfig(databaseURL)
+              only reads and validates the connection string.
+ParseConfig()
+      │
+      │  "Understand this URL"
+      ▼
+   Config
+      │
+      │
+      ▼
+NewWithConfig()
+      │
+      │  "Create a pool that can communicate
+      │   with this PostgreSQL database"
+      ▼
+    Pool
+    Request 1 ──► Open connection ──► PostgreSQL
+             Close connection
+
+Request 2 ──► Open connection ──► PostgreSQL
+             Close connection
+
+Request 3 ──► Open connection ──► PostgreSQL
+             Close connection
+
+      connection pool
+                          ┌── Connection 1 ──┐
+                    ├── Connection 2 ──┤
+Your Go application ├── Connection 3 ──┼──► PostgreSQL
+                    ├── Connection 4 ──┤
+                    └── Connection 5 ──┘
+                    
+
+
+      final for this function
+                    
+                    DATABASE_URL
+     │
+     │ "What database are we talking about?"
+     ▼
+ParseConfig()
+     │
+     ▼
+pgxpool.Config
+     │
+     │
+     │ context
+     │ "How long / under what
+     │  lifetime should this operation run?"
+     ▼
+NewWithConfig()
+     │
+     ▼
+Connection Pool
+     │
+     ├──────── connection ────────┐
+     ├──────── connection ────────┤
+     ├──────── connection ────────┼──► PostgreSQL
+     ├──────── connection ────────┤
+     └──────── connection ────────┘
