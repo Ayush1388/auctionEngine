@@ -1,7 +1,7 @@
 package config
 
 import (
-	"errors"
+	"fmt"
 	"os"
 	"strconv"
 )
@@ -13,30 +13,29 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	port, err := strconv.Atoi(getEnv("PORT", "4000"))
+	port, err := strconv.Atoi(os.Getenv("PORT"))
 	if err != nil {
-		return Config{}, errors.New("invalid PORT")
+		return Config{}, fmt.Errorf("invalid PORT: %w", err)
 	}
 
-	cfg := Config{
+	if port <= 0 {
+		return Config{}, fmt.Errorf("PORT must be greater than 0")
+	}
+
+	environment := os.Getenv("ENVIRONMENT")
+	databaseURL := os.Getenv("DATABASE_URL")
+
+	if environment == "" {
+		return Config{}, fmt.Errorf("ENVIRONMENT is required")
+	}
+
+	if databaseURL == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL is required")
+	}
+
+	return Config{
 		Port:        port,
-		Environment: getEnv("ENVIRONMENT", "development"),
-		DatabaseURL: getEnv("DATABASE_URL", ""),
-	}
-
-	if cfg.DatabaseURL == "" {
-		return Config{}, errors.New("DATABASE_URL is required")
-	}
-
-	return cfg, nil
-}
-
-func getEnv(key string, fallback string) string {
-	value, exists := os.LookupEnv(key)
-
-	if !exists {
-		return fallback
-	}
-
-	return value
+		Environment: environment,
+		DatabaseURL: databaseURL,
+	}, nil
 }
