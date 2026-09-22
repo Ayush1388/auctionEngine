@@ -13,7 +13,10 @@ import (
 
 	"github.com/Ayush1338/auctionEngine/internal/config"
 	"github.com/Ayush1338/auctionEngine/internal/database"
+	"github.com/Ayush1338/auctionEngine/internal/email"
+	"github.com/Ayush1338/auctionEngine/internal/handlers"
 	"github.com/Ayush1338/auctionEngine/internal/server"
+	"github.com/Ayush1338/auctionEngine/internal/user"
 )
 
 func main() {
@@ -59,7 +62,26 @@ func main() {
 
 	logger.Info("connected to PostgreSQL")
 
-	srv := server.New(cfg.Port)
+	emailService := email.NewService(
+		cfg.SMTPHost,
+		cfg.SMTPPort,
+		cfg.SMTPUsername,
+		cfg.SMTPPassword,
+		cfg.SMTPFrom,
+		cfg.AppBaseURL,
+	)
+
+	userRepository := user.NewRepository(db)
+	userService := user.NewService(
+		userRepository,
+		emailService,
+	)
+	userHandler := handlers.NewUserHandler(userService)
+
+	srv := server.New(
+		cfg.Port,
+		userHandler,
+	)
 
 	serverErrors := make(chan error, 1)
 

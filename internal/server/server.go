@@ -12,12 +12,28 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(port int) *Server {
+func New(
+	port int,
+	userHandler *handlers.UserHandler,
+) *Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(
 		"GET /v1/healthcheck",
 		handlers.Healthcheck,
+	)
+
+	mux.HandleFunc(
+		"POST /v1/users/register",
+		userHandler.Register,
+	)
+	mux.HandleFunc(
+		"GET /v1/users/activate",
+		userHandler.Activate,
+	)
+	mux.HandleFunc(
+		"POST /v1/users/resend-activation",
+		userHandler.ResendActivation,
 	)
 
 	httpServer := &http.Server{
