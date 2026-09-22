@@ -17,6 +17,13 @@ func TestLoad(t *testing.T) {
 	t.Setenv("SMTP_FROM", "test@gmail.com")
 	t.Setenv("APP_BASE_URL", "http://localhost:4000")
 
+	t.Setenv(
+		"JWT_SECRET",
+		"test-secret-that-is-at-least-32-characters-long",
+	)
+	t.Setenv("JWT_ISSUER", "auction-engine-test")
+	t.Setenv("JWT_EXPIRATION_HOURS", "24")
+
 	cfg, err := Load()
 
 	if err != nil {
@@ -78,6 +85,26 @@ func TestLoad(t *testing.T) {
 			cfg.AppBaseURL,
 		)
 	}
+
+	if cfg.JWTSecret != "test-secret-that-is-at-least-32-characters-long" {
+		t.Errorf(
+			"expected JWT secret to be loaded",
+		)
+	}
+
+	if cfg.JWTIssuer != "auction-engine-test" {
+		t.Errorf(
+			"expected JWT issuer auction-engine-test, got %s",
+			cfg.JWTIssuer,
+		)
+	}
+
+	if cfg.JWTExpiration.Hours() != 24 {
+		t.Errorf(
+			"expected JWT expiration 24 hours, got %v",
+			cfg.JWTExpiration,
+		)
+	}
 }
 
 func TestLoadInvalidPort(t *testing.T) {
@@ -94,6 +121,13 @@ func TestLoadInvalidPort(t *testing.T) {
 	t.Setenv("SMTP_PASSWORD", "test-app-password")
 	t.Setenv("SMTP_FROM", "test@gmail.com")
 	t.Setenv("APP_BASE_URL", "http://localhost:4000")
+
+	t.Setenv(
+		"JWT_SECRET",
+		"test-secret-that-is-at-least-32-characters-long",
+	)
+	t.Setenv("JWT_ISSUER", "auction-engine-test")
+	t.Setenv("JWT_EXPIRATION_HOURS", "24")
 
 	_, err := Load()
 
@@ -117,6 +151,13 @@ func TestLoadMissingEnvironment(t *testing.T) {
 	t.Setenv("SMTP_FROM", "test@gmail.com")
 	t.Setenv("APP_BASE_URL", "http://localhost:4000")
 
+	t.Setenv(
+		"JWT_SECRET",
+		"test-secret-that-is-at-least-32-characters-long",
+	)
+	t.Setenv("JWT_ISSUER", "auction-engine-test")
+	t.Setenv("JWT_EXPIRATION_HOURS", "24")
+
 	_, err := Load()
 
 	if err == nil {
@@ -135,6 +176,13 @@ func TestLoadMissingDatabaseURL(t *testing.T) {
 	t.Setenv("SMTP_PASSWORD", "test-app-password")
 	t.Setenv("SMTP_FROM", "test@gmail.com")
 	t.Setenv("APP_BASE_URL", "http://localhost:4000")
+
+	t.Setenv(
+		"JWT_SECRET",
+		"test-secret-that-is-at-least-32-characters-long",
+	)
+	t.Setenv("JWT_ISSUER", "auction-engine-test")
+	t.Setenv("JWT_EXPIRATION_HOURS", "24")
 
 	_, err := Load()
 

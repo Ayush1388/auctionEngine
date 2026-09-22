@@ -11,10 +11,12 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/Ayush1338/auctionEngine/internal/auth"
 	"github.com/Ayush1338/auctionEngine/internal/config"
 	"github.com/Ayush1338/auctionEngine/internal/database"
 	"github.com/Ayush1338/auctionEngine/internal/email"
 	"github.com/Ayush1338/auctionEngine/internal/handlers"
+	"github.com/Ayush1338/auctionEngine/internal/outbox"
 	"github.com/Ayush1338/auctionEngine/internal/server"
 	"github.com/Ayush1338/auctionEngine/internal/user"
 )
@@ -33,34 +35,51 @@ func main() {
 
 	if err := godotenv.Load(); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			logger.Error("failed to load .env", "error", err)
+			logger.Error(
+				"failed to load .env",
+				"error",
+				err,
+			)
 			os.Exit(1)
 		}
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Error("failed to load configuration", "error", err)
+		logger.Error(
+			"failed to load configuration",
+			"error",
+			err,
+		)
 		os.Exit(1)
 	}
 
 	logger.Info(
 		"starting application",
-		"environment", cfg.Environment,
-		"port", cfg.Port,
+		"environment",
+		cfg.Environment,
+		"port",
+		cfg.Port,
 	)
 
-	db, err := database.NewPostgresPool(cfg.DatabaseURL)
+	db, err := database.NewPostgresPool(
+		cfg.DatabaseURL,
+	)
 	if err != nil {
 		logger.Error(
 			"failed to connect to PostgreSQL",
-			"error", err,
+			"error",
+			err,
 		)
 		os.Exit(1)
 	}
 	defer db.Close()
 
 	logger.Info("connected to PostgreSQL")
+
+	// --------------------------------------------------
+	// Email
+	// --------------------------------------------------
 
 	emailService := email.NewService(
 		cfg.SMTPHost,
@@ -71,17 +90,75 @@ func main() {
 		cfg.AppBaseURL,
 	)
 
-	userRepository := user.NewRepository(db)
-	userService := user.NewService(
-		userRepository,
+	// --------------------------------------------------
+	// Outbox
+	// --------------------------------------------------
+
+	outboxRepository := outbox.NewRepository(db)
+
+	emailEventHandler := email.NewEventHandler(
 		emailService,
 	)
-	userHandler := handlers.NewUserHandler(userService)
+
+	outboxWorker := outbox.NewWorker(
+		outboxRepository,
+		emailEventHandler,
+		logger,
+	)
+
+	// --------------------------------------------------
+	// Authentication
+	// --------------------------------------------------
+
+	jwtService := user.NewJWTService(
+		cfg.JWTSecret,
+		cfg.JWTIssuer,
+		cfg.JWTExpiration,
+	)
+
+	authMiddleware := auth.NewMiddleware(
+		jwtService,
+	)
+
+	// --------------------------------------------------
+	// Users
+	// --------------------------------------------------
+
+	userRepository := user.NewRepository(db)
+
+	userService := user.NewService(
+		userRepository,
+		jwtService,
+	)
+
+	userHandler := handlers.NewUserHandler(
+		userService,
+	)
+
+	// --------------------------------------------------
+	// HTTP server
+	// --------------------------------------------------
 
 	srv := server.New(
 		cfg.Port,
 		userHandler,
+		authMiddleware,
 	)
+
+	// --------------------------------------------------
+	// Application context
+	// --------------------------------------------------
+
+	appCtx, cancelApp := context.WithCancel(
+		context.Background(),
+	)
+	defer cancelApp()
+
+	go outboxWorker.Run(appCtx)
+
+	// --------------------------------------------------
+	// Start HTTP server
+	// --------------------------------------------------
 
 	serverErrors := make(chan error, 1)
 
@@ -89,7 +166,15 @@ func main() {
 		serverErrors <- srv.Start()
 	}()
 
-	logger.Info("HTTP server started", "port", cfg.Port)
+	logger.Info(
+		"HTTP server started",
+		"port",
+		cfg.Port,
+	)
+
+	// --------------------------------------------------
+	// Graceful shutdown
+	// --------------------------------------------------
 
 	shutdownSignals := make(chan os.Signal, 1)
 
@@ -99,22 +184,30 @@ func main() {
 		syscall.SIGTERM,
 	)
 
+	defer signal.Stop(shutdownSignals)
+
 	select {
 	case err := <-serverErrors:
 		if !errors.Is(err, os.ErrClosed) {
 			logger.Error(
 				"HTTP server error",
-				"error", err,
+				"error",
+				err,
 			)
+
+			cancelApp()
 			os.Exit(1)
 		}
 
 	case sig := <-shutdownSignals:
 		logger.Info(
 			"shutdown signal received",
-			"signal", sig.String(),
+			"signal",
+			sig.String(),
 		)
 	}
+
+	cancelApp()
 
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
@@ -125,7 +218,8 @@ func main() {
 	if err := shutdown(ctx, srv); err != nil {
 		logger.Error(
 			"graceful shutdown failed",
-			"error", err,
+			"error",
+			err,
 		)
 		os.Exit(1)
 	}
@@ -133,7 +227,10 @@ func main() {
 	logger.Info("application stopped")
 }
 
-func shutdown(ctx context.Context, srv *server.Server) error {
+func shutdown(
+	ctx context.Context,
+	srv *server.Server,
+) error {
 	done := make(chan error, 1)
 
 	go func() {

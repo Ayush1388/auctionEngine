@@ -45,6 +45,18 @@ func (h *EventHandler) handleActivationEmail(
 		return err
 	}
 
+	if payload.To == "" {
+		return fmt.Errorf(
+			"activation email recipient is empty",
+		)
+	}
+
+	if payload.ActivationToken == "" {
+		return fmt.Errorf(
+			"activation token is empty",
+		)
+	}
+
 	if err := h.service.SendActivationEmail(
 		payload.To,
 		payload.ActivationToken,

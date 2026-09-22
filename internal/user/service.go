@@ -2,12 +2,18 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+)
+
+var (
+	ErrInvalidCredentials  = errors.New("invalid email or password")
+	ErrAccountNotActivated = errors.New("account is not activated")
 )
 
 type RegisterInput struct {
@@ -19,17 +25,30 @@ type ResendActivationInput struct {
 	Email string `validate:"required,email"`
 }
 
+type LoginInput struct {
+	Email    string `validate:"required,email"`
+	Password string `validate:"required"`
+}
+
+type LoginResult struct {
+	User        User
+	AccessToken string
+}
+
 type Service struct {
 	repository *Repository
 	validator  *validator.Validate
+	jwt        *JWTService
 }
 
 func NewService(
 	repository *Repository,
+	jwtService *JWTService,
 ) *Service {
 	return &Service{
 		repository: repository,
 		validator:  validator.New(),
+		jwt:        jwtService,
 	}
 }
 
@@ -154,4 +173,68 @@ func (s *Service) ResendActivation(
 	}
 
 	return nil
+}
+
+func (s *Service) Login(
+	ctx context.Context,
+	input LoginInput,
+) (LoginResult, error) {
+	input.Email = strings.TrimSpace(input.Email)
+
+	if err := s.validator.Struct(input); err != nil {
+		return LoginResult{}, fmt.Errorf(
+			"invalid login input: %w",
+			err,
+		)
+	}
+
+	existingUser, err := s.repository.GetByEmail(
+		ctx,
+		input.Email,
+	)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return LoginResult{}, ErrInvalidCredentials
+		}
+
+		return LoginResult{}, fmt.Errorf(
+			"failed to find user: %w",
+			err,
+		)
+	}
+
+	if existingUser.ActivatedAt == nil {
+		return LoginResult{}, ErrAccountNotActivated
+	}
+
+	// CheckPassword returns an error when the password
+	// does not match or the stored hash is invalid.
+	if err := CheckPassword(
+		input.Password,
+		existingUser.PasswordHash,
+	); err != nil {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+
+	accessToken, err := s.jwt.GenerateToken(
+		existingUser.ID,
+	)
+	if err != nil {
+		return LoginResult{}, fmt.Errorf(
+			"failed to generate access token: %w",
+			err,
+		)
+	}
+
+	return LoginResult{
+		User:        existingUser,
+		AccessToken: accessToken,
+	}, nil
+}
+
+func (s *Service) GetByID(
+	ctx context.Context,
+	userID uuid.UUID,
+) (User, error) {
+	return s.repository.GetByID(ctx, userID)
 }
