@@ -39,6 +39,7 @@ func Routes(
 	mux.Handle("POST /v1/auctions", protected(auctionHandler.Create))
 	mux.Handle("GET /v1/auctions", authMiddleware.Optional(http.HandlerFunc(auctionHandler.List)))
 	mux.HandleFunc("GET /v1/auctions/{id}", auctionHandler.Get)
+	mux.Handle("POST /v1/auctions/{id}/cancel", protected(auctionHandler.Cancel))
 
 	return mux
 }

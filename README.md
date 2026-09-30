@@ -92,6 +92,7 @@ RETURNING ...
 | `POST` | `/v1/auctions` | JWT | List an item for auction |
 | `GET` | `/v1/auctions` | optional | List auctions, newest first: `?status=ACTIVE&owner=me&limit=20&cursor=…` |
 | `GET` | `/v1/auctions/{id}` | | Get one auction with its item |
+| `POST` | `/v1/auctions/{id}/cancel` | JWT (owner) | Cancel an auction before it starts |
 
 ## Running locally
 
