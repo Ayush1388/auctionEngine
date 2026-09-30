@@ -13,10 +13,12 @@ import (
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
+	"github.com/Ayush1388/auctionEngine/internal/bidding"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
 	"github.com/Ayush1388/auctionEngine/internal/server"
 	"github.com/Ayush1388/auctionEngine/internal/testdb"
 	"github.com/Ayush1388/auctionEngine/internal/user"
+	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
 
 type api struct {
@@ -39,9 +41,14 @@ func newAPI(t *testing.T) *api {
 	a := &api{t: t, pool: pool, jwt: jwt, clock: &clock}
 	auctionService.SetClock(func() time.Time { return *a.clock })
 
+	biddingService := bidding.NewService(pool, bidding.Pessimistic)
+	biddingService.SetClock(func() time.Time { return *a.clock })
+
 	a.handler = server.Routes(
 		handlers.NewUserHandler(user.NewService(pool, user.NewRepository(pool), jwt)),
 		handlers.NewAuctionHandler(auctionService),
+		handlers.NewBidHandler(biddingService),
+		handlers.NewWalletHandler(wallet.NewService(pool)),
 		auth.NewMiddleware(jwt),
 	)
 	return a

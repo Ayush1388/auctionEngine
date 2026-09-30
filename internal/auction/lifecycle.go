@@ -184,7 +184,10 @@ func claimAndMove(
 		UPDATE auctions a
 		SET
 			status = $4,
-			updated_at = now()
+			updated_at = now(),
+			-- Bump the version so an optimistic bid that read the auction
+			-- while it was ACTIVE fails its compare-and-swap and retries.
+			version = a.version + 1
 		FROM due
 		WHERE a.id = due.id
 		RETURNING a.id, a.owner_id, a.current_bid
