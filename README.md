@@ -8,9 +8,9 @@
 
 A backend for **live auctions** written in Go, with user wallets, bid reservations and reliable event delivery.
 
-The focus is on correctness under failure: a user's signup and their activation email can never get out of sync, background workers can't process the same job twice, and money can't go negative.
+The focus is on correctness under concurrency and failure: a user's signup and their activation email can never get out of sync, two workers can't move the same auction, a seller can't cancel an auction that has just gone live, and money can't go negative.
 
-> 🚧 **In progress.** Users, auth and the outbox pipeline work end to end. Auction and bidding endpoints are being built on top of the existing schema.
+> 🚧 **In progress.** Users, auth, the outbox pipeline and auction management (v0.2) work end to end, with integration tests against Postgres. Bidding (v0.3) is next.
 
 ---
 
@@ -43,6 +43,35 @@ RETURNING ...
 - **Retry with delay:** failed events are rescheduled 30 seconds later, and `attempts` and `last_error` are recorded.
 - A **partial index** on pending events (`WHERE processed_at IS NULL`) keeps polling cheap as the table grows.
 
+### Auction lifecycle as a state machine
+
+```
+NOT_ACTIVE ──(starts_at)──► ACTIVE ──(ends_at)──► COMPLETED
+    │
+    └──(owner cancels)──► CANCELLED
+```
+
+The allowed moves live in one map in `internal/auction/status.go`. The database updates derive their `WHERE status = ANY(...)` clause from it (`SourcesOf`), so the SQL and the rules can't drift apart. A test checks all 16 state pairs.
+
+### Race-free status changes
+
+Cancelling looks like "check the auction is still pending, then cancel it". Done as a SELECT followed by an UPDATE, the lifecycle worker could activate the auction in between, and a live auction would get cancelled. Instead the check **is** the update:
+
+```sql
+UPDATE auctions SET status = 'CANCELLED', updated_at = now()
+WHERE id = $1 AND status = ANY($2) AND owner_id = $3 AND starts_at > $4
+```
+
+Postgres re-checks the `WHERE` clause on the locked row, so of two racing updates exactly one succeeds. A test races cancel against activation 25 times and asserts a single winner each round.
+
+### Lifecycle worker
+
+A background worker activates and completes auctions on schedule. It claims batches with `FOR UPDATE SKIP LOCKED`, so it's safe to run on every API instance; a test runs 4 workers over 200 auctions and checks each is completed exactly once. Completing an auction writes an `auction.completed` outbox event **in the same transaction**, for settlement to consume.
+
+### Keyset pagination
+
+`GET /v1/auctions` pages with a cursor on `(created_at, id)` instead of `OFFSET`, so page 500 costs the same as page 1 and new auctions arriving mid-scroll never cause duplicates. Each filter combination has a matching composite index, verified with `EXPLAIN`.
+
 ### Auth and accounts
 
 - Registration with request validation and **Argon2id** password hashing
@@ -59,7 +88,8 @@ RETURNING ...
 ### Operations
 
 - Structured **JSON logging** with `log/slog`
-- **Graceful shutdown**: on SIGINT/SIGTERM the HTTP server drains in-flight requests and the outbox worker stops cleanly, with a 10-second deadline
+- **Graceful shutdown**: on SIGINT/SIGTERM the HTTP server drains in-flight requests, then background workers finish their current event and stop, all within a 10-second deadline
+- **CI** on every pull request: `gofmt`, `go vet`, and `go test -race` against Postgres 18
 - A multi-stage **Docker** build that runs as a non-root user
 
 ---
@@ -67,17 +97,19 @@ RETURNING ...
 ## Architecture
 
 ```
-            ┌──────────────┐     one transaction     ┌───────────────────────────┐
+            ┌──────────────┐    one transaction      ┌───────────────────────────┐
  HTTP  ───► │  handlers →  │ ──────────────────────► │ PostgreSQL                │
- client     │  services →  │  users +                │  users, wallets, auctions │
+ client     │  services →  │  state change +         │  users, items, auctions   │
             │  repositories│  outbox_events          │  bids, outbox_events ...  │
-            └──────────────┘                         └─────────────┬─────────────┘
-                                                                   │ claim (SKIP LOCKED)
-                                                     ┌─────────────▼─────────────┐
-                                                     │ Outbox worker (goroutine) │ ──► SMTP
-                                                     │ retry · lease · mark done │
-                                                     └───────────────────────────┘
+            └──────────────┘                         └──────┬─────────────┬──────┘
+                                         claim (SKIP LOCKED)│             │claim (SKIP LOCKED)
+                                     ┌──────────────────────▼───┐   ┌─────▼────────────────────┐
+                                     │ Lifecycle worker         │   │ Outbox worker            │ ──► SMTP
+                                     │ activate · complete      │   │ retry · lease · mark done│
+                                     └──────────────────────────┘   └──────────────────────────┘
 ```
+
+Services own transaction boundaries; repositories accept anything that can run a query (pool or transaction) and never begin transactions themselves. See [`docs/decisions/0005`](docs/decisions/0005-transactions-owned-by-services.md).
 
 ## API
 
@@ -93,6 +125,14 @@ RETURNING ...
 | `GET` | `/v1/auctions` | optional | List auctions, newest first: `?status=ACTIVE&owner=me&limit=20&cursor=…` |
 | `GET` | `/v1/auctions/{id}` | | Get one auction with its item |
 | `POST` | `/v1/auctions/{id}/cancel` | JWT (owner) | Cancel an auction before it starts |
+
+Errors are always JSON: `{"error": "..."}`, plus a `fields` map for validation errors:
+
+```json
+{"error": "invalid input", "fields": {"ends_at": "must be after starts_at", "item.name": "is required"}}
+```
+
+Prices are integers in the smallest currency unit (paise/cents).
 
 ## Running locally
 
@@ -138,16 +178,20 @@ CI runs formatting checks, `go vet` and the full test suite against Postgres on 
 ## Project layout
 
 ```
-cmd/api          HTTP server entry point, wiring, graceful shutdown
-cmd/migrate      migration runner CLI
-internal/user    users: service, repository, Argon2id, activation tokens, JWT
-internal/auth    JWT middleware
-internal/outbox  outbox repository (claim / retry / mark processed) and worker
-internal/email   SMTP service and outbox event handler
-internal/auction auction domain (in progress)
+cmd/api             HTTP server entry point, wiring, graceful shutdown
+cmd/migrate         migration CLI (up, or -down N)
+internal/auction    auctions: state machine, service, repository, lifecycle worker, pagination
+internal/user       users: service, repository, Argon2id, activation tokens, JWT
+internal/auth       JWT middleware (required and optional)
+internal/outbox     outbox repository, worker and event router
+internal/email      SMTP service and outbox event handler
+internal/database   pgx pool, DBTX interface, WithTx
+internal/httpx      JSON request/response helpers and error format
+internal/validation per-field validation messages
 internal/migration  migration runner (up/down, advisory lock)
-internal/testdb  isolated, migrated schema per integration test
-migrations/      versioned up/down SQL
+internal/testdb     isolated, migrated schema per integration test
+migrations/         versioned up/down SQL
+docs/decisions/     why things are built the way they are
 ```
 
 ## Roadmap
@@ -155,7 +199,7 @@ migrations/      versioned up/down SQL
 Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) and grouped into milestones:
 
 - **v0.1 – Users and auth** ✅
-- **v0.2 – [Auction management](https://github.com/Ayush1388/auctionEngine/milestone/1)**: create, view, list and cancel auctions; lifecycle worker
+- **v0.2 – [Auction management](https://github.com/Ayush1388/auctionEngine/milestone/1)** ✅: create, view, list and cancel auctions; lifecycle worker
 - **v0.3 – Bidding**: wallet reservations, concurrent bids, settlement
 - **Later**: real-time updates over WebSockets, load tests
 
