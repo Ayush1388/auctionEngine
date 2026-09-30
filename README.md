@@ -1,5 +1,6 @@
 # Auction Engine
 
+[![CI](https://github.com/Ayush1388/auctionEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/Ayush1388/auctionEngine/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
@@ -113,9 +114,22 @@ APP_BASE_URL=http://localhost:4000
 go run ./cmd/migrate
 go run ./cmd/api
 
-# Tests
-go test ./...
+# Roll back the latest migration
+go run ./cmd/migrate -down 1
 ```
+
+### Tests
+
+Unit tests run anywhere. Integration tests need Postgres and are skipped unless `TEST_DATABASE_URL` is set; each test gets its own freshly migrated schema, which is dropped afterwards.
+
+```bash
+go test ./...                                   # unit tests only
+
+export TEST_DATABASE_URL=postgres://auction:auction@localhost:5432/auction?sslmode=disable
+go test -race ./...                             # unit + integration
+```
+
+CI runs formatting checks, `go vet` and the full test suite against Postgres on every pull request.
 
 ## Project layout
 
@@ -127,7 +141,8 @@ internal/auth    JWT middleware
 internal/outbox  outbox repository (claim / retry / mark processed) and worker
 internal/email   SMTP service and outbox event handler
 internal/auction auction domain (in progress)
-internal/migration  migration runner
+internal/migration  migration runner (up/down, advisory lock)
+internal/testdb  isolated, migrated schema per integration test
 migrations/      versioned up/down SQL
 ```
 
