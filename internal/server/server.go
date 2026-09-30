@@ -13,53 +13,42 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(
-	port int,
+// Routes builds the HTTP handler. It is separate from New so tests can
+// exercise the real routing without starting a server.
+func Routes(
 	userHandler *handlers.UserHandler,
+	auctionHandler *handlers.AuctionHandler,
 	authMiddleware *auth.Middleware,
-) *Server {
+) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc(
-		"GET /v1/healthcheck",
-		handlers.Healthcheck,
-	)
+	protected := func(h http.HandlerFunc) http.Handler {
+		return authMiddleware.Authenticate(h)
+	}
 
-	// Public user routes.
+	mux.HandleFunc("GET /v1/healthcheck", handlers.Healthcheck)
 
-	mux.HandleFunc(
-		"POST /v1/users/register",
-		userHandler.Register,
-	)
+	// Users
+	mux.HandleFunc("POST /v1/users/register", userHandler.Register)
+	mux.HandleFunc("GET /v1/users/activate", userHandler.Activate)
+	mux.HandleFunc("POST /v1/users/resend-activation", userHandler.ResendActivation)
+	mux.HandleFunc("POST /v1/users/login", userHandler.Login)
+	mux.Handle("GET /v1/users/me", protected(userHandler.Me))
 
-	mux.HandleFunc(
-		"GET /v1/users/activate",
-		userHandler.Activate,
-	)
+	// Auctions
+	mux.Handle("POST /v1/auctions", protected(auctionHandler.Create))
 
-	mux.HandleFunc(
-		"POST /v1/users/resend-activation",
-		userHandler.ResendActivation,
-	)
+	return mux
+}
 
-	mux.HandleFunc(
-		"POST /v1/users/login",
-		userHandler.Login,
-	)
-
-	// Protected user routes.
-
-	mux.Handle(
-		"GET /v1/users/me",
-		authMiddleware.Authenticate(
-			http.HandlerFunc(userHandler.Me),
-		),
-	)
-
+func New(
+	port int,
+	handler http.Handler,
+) *Server {
 	httpServer := &http.Server{
 		Addr: fmt.Sprintf(":%d", port),
 
-		Handler: mux,
+		Handler: handler,
 
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

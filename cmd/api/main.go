@@ -11,6 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/config"
 	"github.com/Ayush1388/auctionEngine/internal/database"
@@ -137,13 +138,29 @@ func main() {
 	)
 
 	// --------------------------------------------------
+	// Auctions
+	// --------------------------------------------------
+
+	auctionService := auction.NewService(
+		db,
+		auction.NewRepository(db),
+	)
+
+	auctionHandler := handlers.NewAuctionHandler(
+		auctionService,
+	)
+
+	// --------------------------------------------------
 	// HTTP server
 	// --------------------------------------------------
 
 	srv := server.New(
 		cfg.Port,
-		userHandler,
-		authMiddleware,
+		server.Routes(
+			userHandler,
+			auctionHandler,
+			authMiddleware,
+		),
 	)
 
 	// --------------------------------------------------

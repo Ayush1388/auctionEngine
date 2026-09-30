@@ -92,10 +92,20 @@ func (v *Validator) Struct(s any) error {
 
 	problems := &Error{}
 	for _, fe := range fieldErrs {
-		problems.Add(fe.Field(), message(fe))
+		problems.Add(fieldPath(fe), message(fe))
 	}
 
 	return problems
+}
+
+// fieldPath returns the dotted JSON path of the field, without the name of
+// the top-level struct: "item.name" rather than "CreateInput.item.name".
+func fieldPath(fe validator.FieldError) string {
+	namespace := fe.Namespace()
+	if i := strings.Index(namespace, "."); i >= 0 {
+		return namespace[i+1:]
+	}
+	return fe.Field()
 }
 
 func message(fe validator.FieldError) string {

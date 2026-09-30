@@ -5,7 +5,12 @@ import (
 	"testing"
 )
 
+type nested struct {
+	Name string `json:"name" validate:"required"`
+}
+
 type input struct {
+	Item     nested `json:"item"`
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required,min=15"`
 	Price    int64  `json:"starting_price" validate:"gte=0"`
@@ -28,6 +33,7 @@ func TestStruct(t *testing.T) {
 		"email":          "must be a valid email address",
 		"password":       "must be at least 15 characters",
 		"starting_price": "must be at least 0",
+		"item.name":      "is required",
 	}
 	for field, msg := range want {
 		if got := problems.Fields[field]; got != msg {
@@ -35,7 +41,7 @@ func TestStruct(t *testing.T) {
 		}
 	}
 
-	if err := v.Struct(input{Email: "a@b.co", Password: "long-enough-password"}); err != nil {
+	if err := v.Struct(input{Item: nested{Name: "lamp"}, Email: "a@b.co", Password: "long-enough-password"}); err != nil {
 		t.Fatalf("valid input: %v", err)
 	}
 }

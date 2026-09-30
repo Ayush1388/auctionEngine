@@ -89,6 +89,7 @@ RETURNING ...
 | `POST` | `/v1/users/resend-activation` | | Send a new activation token |
 | `POST` | `/v1/users/login` | | Get a JWT |
 | `GET` | `/v1/users/me` | JWT | Current user |
+| `POST` | `/v1/auctions` | JWT | List an item for auction |
 
 ## Running locally
 
