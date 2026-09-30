@@ -9,5 +9,6 @@ They are written once and rarely edited. If a decision changes, add a new note t
 | [0002](0002-argon2id-password-hashing.md) | Argon2id for password hashing | Accepted |
 | [0003](0003-skip-locked-workers.md) | `FOR UPDATE SKIP LOCKED` for background workers | Accepted |
 | [0004](0004-hand-written-migration-runner.md) | Hand-written migration runner | Accepted |
+| [0005](0005-transactions-owned-by-services.md) | Services own transaction boundaries | Accepted |
 
 To add one, copy [`template.md`](template.md) and take the next number.

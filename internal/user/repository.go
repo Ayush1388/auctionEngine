@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,7 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Ayush1388/auctionEngine/internal/database"
 )
 
 var (
@@ -20,20 +20,22 @@ var (
 	ErrUserAlreadyActivated   = errors.New("user already activated")
 )
 
-const activationEmailEventType = "email.activation"
-
-type ActivationEmailEvent struct {
-	To              string `json:"to"`
-	ActivationToken string `json:"activation_token"`
-}
-
+// Repository reads and writes users. It never starts transactions itself;
+// the service decides the boundary and passes a transaction via WithTx.
 type Repository struct {
-	db *pgxpool.Pool
+	db database.DBTX
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository {
+func NewRepository(db database.DBTX) *Repository {
 	return &Repository{
 		db: db,
+	}
+}
+
+// WithTx returns a copy of the repository that runs its queries in tx.
+func (r *Repository) WithTx(tx pgx.Tx) *Repository {
+	return &Repository{
+		db: tx,
 	}
 }
 
@@ -42,18 +44,8 @@ func (r *Repository) Create(
 	user User,
 	activationTokenHash string,
 	activationTokenExpiresAt time.Time,
-	activationToken string,
 ) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to begin user registration transaction: %w",
-			err,
-		)
-	}
-	defer tx.Rollback(ctx)
-
-	_, err = tx.Exec(
+	_, err := r.db.Exec(
 		ctx,
 		`
 		INSERT INTO users (
@@ -71,7 +63,6 @@ func (r *Repository) Create(
 		activationTokenHash,
 		activationTokenExpiresAt,
 	)
-
 	if err != nil {
 		var pgErr *pgconn.PgError
 
@@ -81,48 +72,6 @@ func (r *Repository) Create(
 
 		return fmt.Errorf(
 			"failed to create user: %w",
-			err,
-		)
-	}
-
-	activationEmailPayload := ActivationEmailEvent{
-		To:              user.Email,
-		ActivationToken: activationToken,
-	}
-
-	payload, err := json.Marshal(activationEmailPayload)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to marshal activation email payload: %w",
-			err,
-		)
-	}
-
-	_, err = tx.Exec(
-		ctx,
-		`
-		INSERT INTO outbox_events (
-			id,
-			event_type,
-			payload
-		)
-		VALUES ($1, $2, $3)
-		`,
-		uuid.New(),
-		activationEmailEventType,
-		payload,
-	)
-
-	if err != nil {
-		return fmt.Errorf(
-			"failed to create activation email outbox event: %w",
-			err,
-		)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf(
-			"failed to commit user registration transaction: %w",
 			err,
 		)
 	}
@@ -286,19 +235,8 @@ func (r *Repository) UpdateActivationToken(
 	userID uuid.UUID,
 	tokenHash string,
 	expiresAt time.Time,
-	rawToken string,
-	email string,
 ) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to begin resend activation transaction: %w",
-			err,
-		)
-	}
-	defer tx.Rollback(ctx)
-
-	result, err := tx.Exec(
+	result, err := r.db.Exec(
 		ctx,
 		`
 		UPDATE users
@@ -313,7 +251,6 @@ func (r *Repository) UpdateActivationToken(
 		expiresAt,
 		userID,
 	)
-
 	if err != nil {
 		return fmt.Errorf(
 			"failed to update activation token: %w",
@@ -323,48 +260,6 @@ func (r *Repository) UpdateActivationToken(
 
 	if result.RowsAffected() == 0 {
 		return ErrUserAlreadyActivated
-	}
-
-	activationEmailPayload := ActivationEmailEvent{
-		To:              email,
-		ActivationToken: rawToken,
-	}
-
-	payload, err := json.Marshal(activationEmailPayload)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to marshal activation email payload: %w",
-			err,
-		)
-	}
-
-	_, err = tx.Exec(
-		ctx,
-		`
-		INSERT INTO outbox_events (
-			id,
-			event_type,
-			payload
-		)
-		VALUES ($1, $2, $3)
-		`,
-		uuid.New(),
-		activationEmailEventType,
-		payload,
-	)
-
-	if err != nil {
-		return fmt.Errorf(
-			"failed to create activation email outbox event: %w",
-			err,
-		)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf(
-			"failed to commit resend activation transaction: %w",
-			err,
-		)
 	}
 
 	return nil
