@@ -103,9 +103,26 @@ func main() {
 		emailService,
 	)
 
+	outboxRouter := outbox.NewRouter()
+
+	outboxRouter.Register(
+		email.EventTypeActivationEmail,
+		emailEventHandler,
+	)
+
+	// Nothing consumes auction.completed until settlement lands in v0.3.
+	// Acknowledge it so it isn't retried forever.
+	outboxRouter.Register(
+		auction.EventTypeCompleted,
+		outbox.HandlerFunc(func(ctx context.Context, event outbox.Event) error {
+			logger.Info("auction completed", "event_id", event.ID)
+			return nil
+		}),
+	)
+
 	outboxWorker := outbox.NewWorker(
 		outboxRepository,
-		emailEventHandler,
+		outboxRouter,
 		logger,
 	)
 
@@ -176,8 +193,17 @@ func main() {
 
 	var workers sync.WaitGroup
 
+	lifecycleWorker := auction.NewLifecycleWorker(
+		db,
+		logger,
+	)
+
 	workers.Go(func() {
 		outboxWorker.Run(workersCtx)
+	})
+
+	workers.Go(func() {
+		lifecycleWorker.Run(workersCtx)
 	})
 
 	// --------------------------------------------------
