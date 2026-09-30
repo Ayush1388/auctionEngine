@@ -1,3 +1,8 @@
+// Package migration applies versioned SQL files from migrations/ in order
+// and records each one in schema_migrations, so every environment ends up
+// with the same schema. Each migration runs in its own transaction: a
+// failing migration leaves no half-applied state behind. (PostgreSQL, unlike
+// MySQL, can roll back DDL such as CREATE TABLE.)
 package migration
 
 import (

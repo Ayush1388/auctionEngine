@@ -7,6 +7,12 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 )
 
+// EventHandler turns outbox events into emails. It is registered with the
+// outbox Router in cmd/api/main.go for the email.activation event type.
+//
+// Delivery is at-least-once: if the process crashes after SMTP accepted the
+// message but before the event was marked processed, the email is sent
+// again on restart. For an activation link that is harmless.
 type EventHandler struct {
 	service *Service
 }

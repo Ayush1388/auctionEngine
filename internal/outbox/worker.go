@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Handler processes one event. Returning an error schedules a retry.
 type Handler interface {
 	Handle(
 		ctx context.Context,
@@ -14,6 +15,8 @@ type Handler interface {
 	) error
 }
 
+// Worker polls the outbox and hands each claimed event to Handler.
+// Run it in a goroutine; it stops when its context is cancelled.
 type Worker struct {
 	repository *Repository
 	handler    Handler
