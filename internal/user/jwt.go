@@ -36,15 +36,18 @@ func NewJWTService(
 
 type Claims struct {
 	UserID uuid.UUID `json:"user_id"`
+	Role   string    `json:"role"`
 
 	jwt.RegisteredClaims
 }
 
-func (s *JWTService) GenerateToken(userID uuid.UUID) (string, error) {
+// GenerateToken issues an access token for userID with the given role.
+func (s *JWTService) GenerateToken(userID uuid.UUID, role string) (string, error) {
 	now := time.Now()
 
 	claims := Claims{
 		UserID: userID,
+		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID.String(),
 			Issuer:    s.issuer,

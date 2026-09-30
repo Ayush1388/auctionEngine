@@ -2,6 +2,8 @@ package handlers_test
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,7 +17,9 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
+	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/server"
+	"github.com/Ayush1388/auctionEngine/internal/session"
 	"github.com/Ayush1388/auctionEngine/internal/testdb"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
@@ -44,13 +48,17 @@ func newAPI(t *testing.T) *api {
 	biddingService := bidding.NewService(pool, bidding.Pessimistic)
 	biddingService.SetClock(func() time.Time { return *a.clock })
 
-	a.handler = server.Routes(
-		handlers.NewUserHandler(user.NewService(pool, user.NewRepository(pool), jwt)),
-		handlers.NewAuctionHandler(auctionService),
-		handlers.NewBidHandler(biddingService),
-		handlers.NewWalletHandler(wallet.NewService(pool)),
-		auth.NewMiddleware(jwt),
-	)
+	sessions := session.NewService(pool, jwt, time.Hour)
+	a.handler = server.Routes(server.Deps{
+		Users:    handlers.NewUserHandler(user.NewService(pool, user.NewRepository(pool), jwt), sessions, nil),
+		Sessions: handlers.NewSessionHandler(sessions),
+		Auctions: handlers.NewAuctionHandler(auctionService),
+		Bids:     handlers.NewBidHandler(biddingService),
+		Wallets:  handlers.NewWalletHandler(wallet.NewService(pool)),
+		Admin:    handlers.NewAdminHandler(wallet.NewService(pool), outbox.NewRepository(pool)),
+		Auth:     auth.NewMiddleware(jwt),
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
 	return a
 }
 
@@ -66,7 +74,7 @@ func (a *api) newUser() (uuid.UUID, string) {
 		a.t.Fatal(err)
 	}
 
-	token, err := a.jwt.GenerateToken(id)
+	token, err := a.jwt.GenerateToken(id, "user")
 	if err != nil {
 		a.t.Fatal(err)
 	}

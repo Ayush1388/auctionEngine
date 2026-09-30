@@ -16,10 +16,12 @@ package outbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Ayush1388/auctionEngine/internal/database"
@@ -303,5 +305,58 @@ func DecodePayload(
 		)
 	}
 
+	return nil
+}
+
+// ErrNotFailed is returned by RetryFailed for an event that isn't
+// dead-lettered (unknown, pending, or already processed).
+var ErrNotFailed = errors.New("event is not dead-lettered")
+
+// FailedEvent is a dead-lettered event as shown to operators.
+type FailedEvent struct {
+	ID        uuid.UUID `json:"id"`
+	EventType string    `json:"event_type"`
+	Attempts  int       `json:"attempts"`
+	LastError *string   `json:"last_error"`
+	FailedAt  time.Time `json:"failed_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ListFailed returns the most recently dead-lettered events.
+func (r *Repository) ListFailed(ctx context.Context, limit int) ([]FailedEvent, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, event_type, attempts, last_error, failed_at, created_at
+		FROM outbox_events
+		WHERE failed_at IS NOT NULL AND processed_at IS NULL
+		ORDER BY failed_at DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list failed events: %w", err)
+	}
+	events, err := pgx.CollectRows(rows, pgx.RowToStructByPos[FailedEvent])
+	if err != nil {
+		return nil, fmt.Errorf("list failed events: %w", err)
+	}
+	if events == nil {
+		events = []FailedEvent{}
+	}
+	return events, nil
+}
+
+// RetryFailed puts a dead-lettered event back into the queue with a fresh
+// set of attempts.
+func (r *Repository) RetryFailed(ctx context.Context, id uuid.UUID) error {
+	result, err := r.db.Exec(ctx, `
+		UPDATE outbox_events
+		SET failed_at = NULL, attempts = 0, available_at = now(), locked_at = NULL
+		WHERE id = $1 AND failed_at IS NOT NULL AND processed_at IS NULL
+	`, id)
+	if err != nil {
+		return fmt.Errorf("retry failed event: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFailed
+	}
 	return nil
 }

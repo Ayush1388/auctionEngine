@@ -240,6 +240,7 @@ func (s *Service) Login(
 
 	accessToken, err := s.jwt.GenerateToken(
 		existingUser.ID,
+		existingUser.Role,
 	)
 	if err != nil {
 		return LoginResult{}, fmt.Errorf(

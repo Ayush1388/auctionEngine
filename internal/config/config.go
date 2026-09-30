@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -40,6 +41,21 @@ type Config struct {
 	// BidLocking is "pessimistic" (default) or "optimistic"; see
 	// internal/bidding/service.go for the trade-off.
 	BidLocking string
+
+	// RefreshTokenTTL is how long a login lasts without activity.
+	RefreshTokenTTL time.Duration
+
+	// CORSAllowedOrigins are the browser origins allowed to call the API,
+	// e.g. https://app.example.com. Empty means no cross-origin browser
+	// access (non-browser clients are unaffected).
+	CORSAllowedOrigins []string
+
+	// TrustedProxies are CIDRs of load balancers whose X-Forwarded-For
+	// header may be believed when working out a client's IP.
+	TrustedProxies []string
+
+	// RateLimitsEnabled can be switched off for load testing.
+	RateLimitsEnabled bool
 }
 
 func Load() (Config, error) {
@@ -66,7 +82,7 @@ func Load() (Config, error) {
 	jwtExpirationHours, err := strconv.Atoi(
 		os.Getenv("JWT_EXPIRATION_HOURS"),
 	)
-	if err != nil {
+	if err != nil && os.Getenv("ACCESS_TOKEN_TTL") == "" {
 		return Config{}, fmt.Errorf(
 			"invalid JWT_EXPIRATION_HOURS: %w",
 			err,
@@ -147,7 +163,30 @@ func Load() (Config, error) {
 		)
 	}
 
-	if jwtExpirationHours <= 0 {
+	// ACCESS_TOKEN_TTL (a Go duration such as "15m") overrides
+	// JWT_EXPIRATION_HOURS. Short access tokens limit how long a stolen or
+	// no-longer-valid token works; refresh tokens keep users logged in.
+	jwtExpiration := time.Duration(jwtExpirationHours) * time.Hour
+	if v := os.Getenv("ACCESS_TOKEN_TTL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return Config{}, fmt.Errorf("invalid ACCESS_TOKEN_TTL: %q", v)
+		}
+		jwtExpiration = d
+	}
+
+	refreshTTL := 30 * 24 * time.Hour
+	if v := os.Getenv("REFRESH_TOKEN_TTL_HOURS"); v != "" {
+		h, err := strconv.Atoi(v)
+		if err != nil || h <= 0 {
+			return Config{}, fmt.Errorf("invalid REFRESH_TOKEN_TTL_HOURS: %q", v)
+		}
+		refreshTTL = time.Duration(h) * time.Hour
+	}
+
+	rateLimits := os.Getenv("RATE_LIMITS") != "off"
+
+	if jwtExpirationHours <= 0 && os.Getenv("ACCESS_TOKEN_TTL") == "" {
 		return Config{}, fmt.Errorf(
 			"JWT_EXPIRATION_HOURS must be greater than zero",
 		)
@@ -168,8 +207,24 @@ func Load() (Config, error) {
 
 		JWTSecret:     jwtSecret,
 		JWTIssuer:     jwtIssuer,
-		JWTExpiration: time.Duration(jwtExpirationHours) * time.Hour,
+		JWTExpiration: jwtExpiration,
 
 		BidLocking: bidLocking,
+
+		RefreshTokenTTL:    refreshTTL,
+		CORSAllowedOrigins: splitList(os.Getenv("CORS_ALLOWED_ORIGINS")),
+		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
+		RateLimitsEnabled:  rateLimits,
 	}, nil
+}
+
+// splitList parses a comma-separated env var, ignoring blanks.
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

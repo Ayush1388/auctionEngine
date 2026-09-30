@@ -10,6 +10,7 @@ import (
 
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
+	"github.com/Ayush1388/auctionEngine/internal/session"
 	"github.com/Ayush1388/auctionEngine/internal/testdb"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 )
@@ -19,7 +20,7 @@ func newUserMux(t *testing.T) http.Handler {
 
 	pool := testdb.New(t)
 	jwt := user.NewJWTService("0123456789abcdef0123456789abcdef", "test", time.Hour)
-	h := handlers.NewUserHandler(user.NewService(pool, user.NewRepository(pool), jwt))
+	h := handlers.NewUserHandler(user.NewService(pool, user.NewRepository(pool), jwt), session.NewService(pool, jwt, time.Hour), nil)
 	mw := auth.NewMiddleware(jwt)
 
 	mux := http.NewServeMux()

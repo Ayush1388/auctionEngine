@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Ayush1388/auctionEngine/internal/logctx"
 	"github.com/Ayush1388/auctionEngine/internal/validation"
 )
 
@@ -60,7 +61,7 @@ func BadRequest(w http.ResponseWriter, err error) {
 // ServerError logs err with the request and returns a generic 500. Internal
 // details such as SQL errors never reach the client.
 func ServerError(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Error(
+	logctx.From(r.Context()).Error(
 		"internal server error",
 		"method", r.Method,
 		"path", r.URL.Path,
