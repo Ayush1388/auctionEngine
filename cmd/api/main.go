@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -164,15 +166,19 @@ func main() {
 	)
 
 	// --------------------------------------------------
-	// Application context
+	// Background workers
 	// --------------------------------------------------
 
-	appCtx, cancelApp := context.WithCancel(
+	workersCtx, stopWorkers := context.WithCancel(
 		context.Background(),
 	)
-	defer cancelApp()
+	defer stopWorkers()
 
-	go outboxWorker.Run(appCtx)
+	var workers sync.WaitGroup
+
+	workers.Go(func() {
+		outboxWorker.Run(workersCtx)
+	})
 
 	// --------------------------------------------------
 	// Start HTTP server
@@ -204,18 +210,18 @@ func main() {
 
 	defer signal.Stop(shutdownSignals)
 
+	exitCode := 0
+
 	select {
 	case err := <-serverErrors:
-		if !errors.Is(err, os.ErrClosed) {
-			logger.Error(
-				"HTTP server error",
-				"error",
-				err,
-			)
-
-			cancelApp()
-			os.Exit(1)
-		}
+		// Start only returns early if the server failed, e.g. the port
+		// was already in use.
+		logger.Error(
+			"HTTP server error",
+			"error",
+			err,
+		)
+		exitCode = 1
 
 	case sig := <-shutdownSignals:
 		logger.Info(
@@ -225,41 +231,59 @@ func main() {
 		)
 	}
 
-	cancelApp()
-
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
-		10*time.Second,
+		shutdownTimeout,
 	)
 	defer cancel()
 
-	if err := shutdown(ctx, srv); err != nil {
+	if err := shutdown(ctx, srv, stopWorkers, &workers); err != nil {
 		logger.Error(
 			"graceful shutdown failed",
 			"error",
 			err,
 		)
-		os.Exit(1)
+		exitCode = 1
 	}
 
 	logger.Info("application stopped")
+
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
 }
 
+const shutdownTimeout = 10 * time.Second
+
+// shutdown stops the HTTP server first, so no new work (and no new outbox
+// events) arrives, then stops the background workers and waits for them to
+// finish their current batch. Everything shares one deadline.
 func shutdown(
 	ctx context.Context,
 	srv *server.Server,
+	stopWorkers context.CancelFunc,
+	workers *sync.WaitGroup,
 ) error {
-	done := make(chan error, 1)
+	// Stops accepting connections and waits for in-flight requests.
+	httpErr := srv.Shutdown(ctx)
 
+	stopWorkers()
+
+	done := make(chan struct{})
 	go func() {
-		done <- srv.Shutdown()
+		workers.Wait()
+		close(done)
 	}()
 
 	select {
-	case err := <-done:
-		return err
-
+	case <-done:
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Join(httpErr, fmt.Errorf("workers did not stop in time: %w", ctx.Err()))
 	}
+
+	if httpErr != nil {
+		return fmt.Errorf("http server: %w", httpErr)
+	}
+
+	return nil
 }
