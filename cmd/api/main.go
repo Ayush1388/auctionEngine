@@ -127,6 +127,7 @@ func main() {
 	userRepository := user.NewRepository(db)
 
 	userService := user.NewService(
+		db,
 		userRepository,
 		jwtService,
 	)

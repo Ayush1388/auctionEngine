@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Ayush1388/auctionEngine/internal/httpx"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/google/uuid"
 )
@@ -35,11 +36,7 @@ func (m *Middleware) Authenticate(
 			)
 
 			if authorizationHeader == "" {
-				http.Error(
-					w,
-					"missing authorization header",
-					http.StatusUnauthorized,
-				)
+				httpx.Error(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
@@ -49,11 +46,7 @@ func (m *Middleware) Authenticate(
 
 			if len(parts) != 2 ||
 				!strings.EqualFold(parts[0], "Bearer") {
-				http.Error(
-					w,
-					"invalid authorization header",
-					http.StatusUnauthorized,
-				)
+				httpx.Error(w, http.StatusUnauthorized, "invalid authorization header")
 				return
 			}
 
@@ -61,11 +54,7 @@ func (m *Middleware) Authenticate(
 				parts[1],
 			)
 			if err != nil {
-				http.Error(
-					w,
-					"invalid or expired token",
-					http.StatusUnauthorized,
-				)
+				httpx.Error(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
 
