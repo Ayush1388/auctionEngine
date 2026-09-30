@@ -83,11 +83,16 @@ A background worker activates and completes auctions on schedule. It claims batc
 
 `GET /v1/auctions` pages with a cursor on `(created_at, id)` instead of `OFFSET`, so page 500 costs the same as page 1 and new auctions arriving mid-scroll never cause duplicates. Each filter combination has a matching composite index, verified with `EXPLAIN`.
 
-### Auth and accounts
+### Auth, sessions and abuse protection
 
-- Registration with request validation and **Argon2id** password hashing
-- **Account activation**: only a hash of the token is stored in the database, and tokens expire after 24 hours; a resend endpoint is included
-- **JWT** login and an authentication middleware protecting private routes
+- Registration with validation and **Argon2id** hashing (parameters stored per hash, upgraded on login)
+- **Account activation** with hashed, expiring, single-use tokens
+- **Short-lived JWT access tokens + rotating refresh tokens** with reuse detection and logout ([`0008`](docs/decisions/0008-access-and-refresh-tokens.md))
+- **RBAC**: `user` and `admin` roles; admin-only operator endpoints; `go run ./cmd/admin promote <email>`
+- **Token-bucket rate limiting** per IP, per user and per login email; `X-Forwarded-For` trusted only from configured proxies
+- No account enumeration: same answers and timing whether an email exists or not
+- Request IDs, structured access logs, panic recovery, CORS allow-list and security headers on every response
+- **OpenAPI 3.1** contract at `/v1/openapi.json`, kept in sync with the router by a test
 
 ### Database
 
@@ -130,7 +135,9 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `POST` | `/v1/users/register` | | Create an account and queue the activation email |
 | `GET` | `/v1/users/activate?token=…` | | Activate an account |
 | `POST` | `/v1/users/resend-activation` | | Send a new activation token (always `204`, so it can't be used to probe for accounts) |
-| `POST` | `/v1/users/login` | | Get a JWT |
+| `POST` | `/v1/users/login` | | Get an access token and a refresh token |
+| `POST` | `/v1/auth/refresh` | | Rotate the refresh token, get a new access token |
+| `POST` | `/v1/auth/logout` | | Revoke the session |
 | `GET` | `/v1/users/me` | JWT | Current user |
 | `POST` | `/v1/auctions` | JWT | List an item for auction |
 | `GET` | `/v1/auctions` | optional | List auctions, newest first: `?status=ACTIVE&owner=me&limit=20&cursor=…` |
@@ -141,6 +148,10 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `GET` | `/v1/wallet` | JWT | Available and reserved balance |
 | `POST` | `/v1/wallet/deposits` | JWT | Add test funds (`Idempotency-Key` required) |
 | `GET` | `/v1/wallet/ledger` | JWT | Every money movement, newest first |
+| `GET` | `/v1/admin/reconcile` | admin | Check the books balance |
+| `GET` | `/v1/admin/outbox/failed` | admin | Dead-lettered events |
+| `POST` | `/v1/admin/outbox/{id}/retry` | admin | Requeue a dead-lettered event |
+| `GET` | `/v1/openapi.json` | | OpenAPI 3.1 description of this API |
 
 Errors are always JSON: `{"error": "..."}`, plus a `fields` map for validation errors:
 
@@ -196,11 +207,17 @@ CI runs formatting checks, `go vet` and the full test suite against Postgres on 
 ```
 cmd/api             HTTP server entry point, wiring, graceful shutdown
 cmd/migrate         migration CLI (up, or -down N)
+cmd/admin           operator CLI (promote / demote admins)
 internal/auction    auctions: state machine, service, repository, lifecycle worker, pagination
 internal/bidding    placing bids (two locking strategies), bid history, settlement
 internal/wallet     wallets, double-entry ledger, reconciliation
 internal/user       users: service, repository, Argon2id, activation tokens, JWT
-internal/auth       JWT middleware (required and optional)
+internal/auth       JWT middleware (required, optional, RequireRole)
+internal/session    refresh tokens: issue, rotate, reuse detection, logout
+internal/ratelimit  token-bucket limiter, middleware, trusted-proxy client IP
+internal/middleware request IDs, access log, recover, security headers, CORS
+internal/logctx     request-scoped logger in the context
+api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
 internal/database   pgx pool, DBTX interface, WithTx
@@ -219,6 +236,7 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.1 – Users and auth** ✅
 - **v0.2 – [Auction management](https://github.com/Ayush1388/auctionEngine/milestone/1)** ✅: create, view, list and cancel auctions; lifecycle worker
 - **v0.3 – Bidding** ✅: wallet reservations, concurrent bids, double-entry ledger, settlement, idempotency, anti-sniping
-- **Later**: real-time updates over WebSockets, load tests
+- **v0.4 – Security** ✅: rate limiting, refresh tokens, RBAC, CORS, request IDs, OpenAPI
+- **Later**: Redis, search, WebSockets, Kafka, gRPC, production hardening
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).

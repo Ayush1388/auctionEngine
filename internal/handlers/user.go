@@ -2,11 +2,16 @@ package handlers
 
 import (
 	"errors"
+	"math"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/httpx"
+	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
+	"github.com/Ayush1388/auctionEngine/internal/session"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/Ayush1388/auctionEngine/internal/validation"
 )
@@ -15,12 +20,25 @@ import (
 // call the service, map the result or error to a status code, JSON out.
 // Business rules live in user.Service so they can be tested without HTTP.
 type UserHandler struct {
-	service *user.Service
+	service  *user.Service
+	sessions *session.Service
+
+	// loginLimiter throttles login attempts per email address (brute-force
+	// protection). The per-IP limit alone isn't enough: an attacker with
+	// many IPs (a botnet) can still hammer one account. nil disables it.
+	loginLimiter ratelimit.Limiter
 }
 
-func NewUserHandler(service *user.Service) *UserHandler {
+// LoginPerEmail allows 5 quick attempts, then one per minute, per account.
+// Real users almost never notice; guessing a password at 1/minute is
+// hopeless against Argon2id-hashed passwords of 15+ characters.
+var LoginPerEmail = ratelimit.PerMinute("login_email", 1, 5)
+
+func NewUserHandler(service *user.Service, sessions *session.Service, loginLimiter ratelimit.Limiter) *UserHandler {
 	return &UserHandler{
-		service: service,
+		service:      service,
+		sessions:     sessions,
+		loginLimiter: loginLimiter,
 	}
 }
 
@@ -31,9 +49,11 @@ type userResponse struct {
 }
 
 type loginResponse struct {
-	AccessToken string       `json:"access_token"`
-	TokenType   string       `json:"token_type"`
-	User        userResponse `json:"user"`
+	AccessToken      string       `json:"access_token"`
+	TokenType        string       `json:"token_type"`
+	RefreshToken     string       `json:"refresh_token"`
+	RefreshExpiresAt time.Time    `json:"refresh_expires_at"`
+	User             userResponse `json:"user"`
 }
 
 func toUserResponse(u user.User) userResponse {
@@ -109,13 +129,30 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.loginLimiter != nil {
+		key := strings.ToLower(strings.TrimSpace(input.Email))
+		d, err := h.loginLimiter.Allow(r.Context(), LoginPerEmail, key)
+		if err == nil && !d.Allowed {
+			w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(d.RetryAfter.Seconds()))))
+			httpx.Error(w, http.StatusTooManyRequests, "too many login attempts for this account, try again later")
+			return
+		}
+	}
+
 	result, err := h.service.Login(r.Context(), input)
 	switch {
 	case err == nil:
+		tokens, err := h.sessions.Issue(r.Context(), result.User.ID, result.User.Role)
+		if err != nil {
+			httpx.ServerError(w, r, err)
+			return
+		}
 		httpx.WriteJSON(w, http.StatusOK, loginResponse{
-			AccessToken: result.AccessToken,
-			TokenType:   "Bearer",
-			User:        toUserResponse(result.User),
+			AccessToken:      tokens.AccessToken,
+			TokenType:        "Bearer",
+			RefreshToken:     tokens.RefreshToken,
+			RefreshExpiresAt: tokens.RefreshExpiresAt.UTC(),
+			User:             toUserResponse(result.User),
 		})
 	case errors.Is(err, validation.ErrInvalid):
 		httpx.BadRequest(w, err)
