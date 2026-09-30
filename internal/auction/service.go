@@ -142,3 +142,10 @@ func (s *Service) validate(input CreateInput) error {
 
 	return problems.OrNil()
 }
+
+func (s *Service) Get(
+	ctx context.Context,
+	id uuid.UUID,
+) (Auction, error) {
+	return s.repository.GetByID(ctx, id)
+}

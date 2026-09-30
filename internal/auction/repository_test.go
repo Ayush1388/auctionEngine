@@ -2,6 +2,7 @@ package auction_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -104,5 +105,14 @@ func TestCreateRejectsUnknownOwner(t *testing.T) {
 	}
 	if n := count(t, pool, "items"); n != 0 {
 		t.Fatalf("items = %d, want 0", n)
+	}
+}
+
+func TestGetByIDNotFound(t *testing.T) {
+	pool := testdb.New(t)
+
+	_, err := auction.NewRepository(pool).GetByID(context.Background(), uuid.New())
+	if !errors.Is(err, auction.ErrNotFound) {
+		t.Fatalf("got %v, want ErrNotFound", err)
 	}
 }
