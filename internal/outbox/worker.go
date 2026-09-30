@@ -110,24 +110,39 @@ func (w *Worker) processOne(
 			"error", err,
 		)
 
-		if retryErr := w.repository.Retry(
+		deadLettered, retryErr := w.repository.Retry(
 			finishCtx,
 			event.ID,
 			err,
-		); retryErr != nil {
+		)
+		if retryErr != nil {
 			w.logger.Error(
 				"failed to schedule outbox retry",
 				"event_id", event.ID,
 				"error", retryErr,
 			)
 		}
+		if deadLettered {
+			w.logger.Error(
+				"outbox event gave up after max attempts",
+				"event_id", event.ID,
+				"event_type", event.EventType,
+				"attempts", event.Attempts,
+			)
+		}
 
 		return
+	}
+
+	var redactKeys []string
+	if r, ok := w.handler.(Redactor); ok {
+		redactKeys = r.RedactKeys(event.EventType)
 	}
 
 	if err := w.repository.MarkProcessed(
 		finishCtx,
 		event.ID,
+		redactKeys,
 	); err != nil {
 		w.logger.Error(
 			"failed to mark outbox event processed",

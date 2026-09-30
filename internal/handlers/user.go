@@ -86,16 +86,14 @@ func (h *UserHandler) ResendActivation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Always 204 for a valid email, whether or not it has an account or is
+	// already activated, so this endpoint can't be used to probe for users.
 	err := h.service.ResendActivation(r.Context(), input)
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, validation.ErrInvalid):
 		httpx.BadRequest(w, err)
-	case errors.Is(err, user.ErrUserNotFound):
-		httpx.Error(w, http.StatusNotFound, "user not found")
-	case errors.Is(err, user.ErrUserAlreadyActivated):
-		httpx.Error(w, http.StatusConflict, "account is already activated")
 	default:
 		httpx.ServerError(w, r, err)
 	}

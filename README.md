@@ -40,7 +40,8 @@ RETURNING ...
 
 - **`FOR UPDATE SKIP LOCKED`** lets several workers poll the same table without claiming the same event.
 - **Lease timeout:** if a worker crashes mid-event, the lock expires after 5 minutes and another worker picks the event up.
-- **Retry with delay:** failed events are rescheduled 30 seconds later, and `attempts` and `last_error` are recorded.
+- **Retry with backoff:** failed events are retried after 30s, 1m, 2m… (capped at 1h). After 8 attempts they are parked with `failed_at` instead of retrying forever. `attempts` and `last_error` are recorded.
+- **Secrets don't linger:** the activation token is removed from the stored payload once the email has been sent.
 - A **partial index** on pending events (`WHERE processed_at IS NULL`) keeps polling cheap as the table grows.
 
 ### Auction lifecycle as a state machine
@@ -118,7 +119,7 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `GET` | `/v1/healthcheck` | | Service health |
 | `POST` | `/v1/users/register` | | Create an account and queue the activation email |
 | `GET` | `/v1/users/activate?token=…` | | Activate an account |
-| `POST` | `/v1/users/resend-activation` | | Send a new activation token |
+| `POST` | `/v1/users/resend-activation` | | Send a new activation token (always `204`, so it can't be used to probe for accounts) |
 | `POST` | `/v1/users/login` | | Get a JWT |
 | `GET` | `/v1/users/me` | JWT | Current user |
 | `POST` | `/v1/auctions` | JWT | List an item for auction |

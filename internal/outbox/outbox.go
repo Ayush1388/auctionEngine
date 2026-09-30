@@ -50,6 +50,7 @@ func (r *Repository) Claim(
 			SELECT id
 			FROM outbox_events
 			WHERE processed_at IS NULL
+			  AND failed_at IS NULL
 			  AND available_at <= now()
 			  AND (
 				locked_at IS NULL
@@ -120,10 +121,18 @@ func (r *Repository) Claim(
 	return events, nil
 }
 
+// MarkProcessed records that an event was handled. Any redactKeys are
+// removed from the stored payload, so secrets such as activation tokens
+// don't sit in the table after they've been delivered.
 func (r *Repository) MarkProcessed(
 	ctx context.Context,
 	id uuid.UUID,
+	redactKeys []string,
 ) error {
+	if redactKeys == nil {
+		redactKeys = []string{}
+	}
+
 	_, err := r.db.Exec(
 		ctx,
 		`
@@ -131,12 +140,13 @@ func (r *Repository) MarkProcessed(
 		SET
 			processed_at = now(),
 			locked_at = NULL,
-			last_error = NULL
+			last_error = NULL,
+			payload = payload - $2::text[]
 		WHERE id = $1
 		`,
 		id,
+		redactKeys,
 	)
-
 	if err != nil {
 		return fmt.Errorf(
 			"failed to mark outbox event processed: %w",
@@ -175,33 +185,49 @@ func (r *Repository) Release(
 	return nil
 }
 
+// MaxAttempts is how many times an event is tried before it is parked
+// with failed_at set. With exponential backoff from 30 seconds, eight
+// attempts span roughly an hour.
+const MaxAttempts = 8
+
+// Retry schedules another attempt with exponential backoff (30s, 1m, 2m,
+// ... capped at 1h), or dead-letters the event once it has used all its
+// attempts. It reports whether the event was dead-lettered.
 func (r *Repository) Retry(
 	ctx context.Context,
 	id uuid.UUID,
 	processingErr error,
-) error {
-	_, err := r.db.Exec(
+) (bool, error) {
+	var deadLettered bool
+
+	// attempts was already incremented when the event was claimed.
+	err := r.db.QueryRow(
 		ctx,
 		`
 		UPDATE outbox_events
 		SET
 			locked_at = NULL,
-			available_at = now() + INTERVAL '30 seconds',
-			last_error = $1
+			last_error = $1,
+			failed_at = CASE WHEN attempts >= $3 THEN now() END,
+			available_at = now() + LEAST(
+				INTERVAL '30 seconds' * power(2, GREATEST(attempts - 1, 0)),
+				INTERVAL '1 hour'
+			)
 		WHERE id = $2
+		RETURNING failed_at IS NOT NULL
 		`,
 		processingErr.Error(),
 		id,
-	)
-
+		MaxAttempts,
+	).Scan(&deadLettered)
 	if err != nil {
-		return fmt.Errorf(
+		return false, fmt.Errorf(
 			"failed to schedule outbox retry: %w",
 			err,
 		)
 	}
 
-	return nil
+	return deadLettered, nil
 }
 
 // Enqueue adds an event to the outbox. Pass the transaction that makes the

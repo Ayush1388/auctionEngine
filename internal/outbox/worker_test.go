@@ -34,7 +34,7 @@ func TestWorkerShutdownMidBatch(t *testing.T) {
 
 	workerCtx, cancel := context.WithCancel(ctx)
 	handler := &cancelAfterFirst{cancel: cancel}
-	worker := NewWorker(NewRepository(pool), handler, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	worker := NewWorker(NewRepository(pool), handler, quietLogger())
 
 	if err := worker.process(workerCtx); err != nil {
 		t.Fatalf("process: %v", err)
@@ -64,4 +64,8 @@ func TestWorkerShutdownMidBatch(t *testing.T) {
 	if locked != 0 || attempted != 0 {
 		t.Errorf("locked = %d, attempted = %d; want both 0", locked, attempted)
 	}
+}
+
+func quietLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

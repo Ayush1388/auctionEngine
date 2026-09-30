@@ -16,4 +16,5 @@ Use **Argon2id** (`golang.org/x/crypto/argon2`) with a random 16-byte salt per p
 ## Consequences
 - Each login costs about 64 MiB of memory for a short time, so the login endpoint needs rate limiting before production.
 - Verification uses `subtle.ConstantTimeCompare` to avoid timing leaks.
-- `CheckPassword` currently verifies with the constants in code rather than the parameters parsed from the stored hash. Raising the cost later would break existing logins until verification reads the stored parameters.
+- Verification reads the parameters stored in each hash, so the cost can be raised without breaking existing logins. After a successful login, a hash made with weaker parameters is re-hashed with the current ones (`NeedsRehash`).
+- A login for an unknown email still verifies against a dummy hash, so response time doesn't reveal which emails are registered.

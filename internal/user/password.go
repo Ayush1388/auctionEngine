@@ -48,8 +48,17 @@ func HashPassword(password string) (string, error) {
 	), nil
 }
 
+type argon2Params struct {
+	memory  uint32
+	time    uint32
+	threads uint8
+}
+
+// CheckPassword verifies password against a stored PHC-format hash. It uses
+// the parameters recorded in the hash, not the current constants, so
+// raising the cost for new hashes doesn't lock out existing users.
 func CheckPassword(password, encodedHash string) error {
-	salt, expectedHash, err := parseHash(encodedHash)
+	params, salt, expectedHash, err := parseHash(encodedHash)
 	if err != nil {
 		return err
 	}
@@ -57,10 +66,10 @@ func CheckPassword(password, encodedHash string) error {
 	actualHash := argon2.IDKey(
 		[]byte(password),
 		salt,
-		argon2Time,
-		argon2Memory,
-		argon2Threads,
-		argon2KeyLen,
+		params.time,
+		params.memory,
+		params.threads,
+		uint32(len(expectedHash)),
 	)
 
 	if subtle.ConstantTimeCompare(actualHash, expectedHash) != 1 {
@@ -70,64 +79,90 @@ func CheckPassword(password, encodedHash string) error {
 	return nil
 }
 
-func parseHash(encodedHash string) ([]byte, []byte, error) {
+// NeedsRehash reports whether a stored hash uses weaker parameters than
+// the current ones, so it can be upgraded after a successful login.
+func NeedsRehash(encodedHash string) bool {
+	params, _, _, err := parseHash(encodedHash)
+	if err != nil {
+		return true
+	}
+
+	return params.memory < argon2Memory ||
+		params.time < argon2Time ||
+		params.threads < argon2Threads
+}
+
+// dummyHash is verified when a login names an unknown email, so a login
+// takes about as long whether the account exists or not. Otherwise response
+// times would reveal which emails are registered.
+var dummyHash = func() string {
+	h, err := HashPassword("dummy-password-for-timing-only")
+	if err != nil {
+		panic(err)
+	}
+	return h
+}()
+
+func parseHash(encodedHash string) (argon2Params, []byte, []byte, error) {
+	var params argon2Params
+
 	parts := strings.Split(encodedHash, "$")
 
 	if len(parts) != 6 {
-		return nil, nil, fmt.Errorf("invalid password hash format")
+		return params, nil, nil, fmt.Errorf("invalid password hash format")
 	}
 
 	if parts[1] != "argon2id" || parts[2] != "v=19" {
-		return nil, nil, fmt.Errorf("unsupported password hash")
+		return params, nil, nil, fmt.Errorf("unsupported password hash")
 	}
 
-	params := strings.Split(parts[3], ",")
+	fields := strings.Split(parts[3], ",")
 
-	if len(params) != 3 {
-		return nil, nil, fmt.Errorf("invalid Argon2 parameters")
+	if len(fields) != 3 {
+		return params, nil, nil, fmt.Errorf("invalid Argon2 parameters")
 	}
 
-	var memory uint32
-	var time uint32
-	var threads uint8
+	for _, field := range fields {
+		kv := strings.SplitN(field, "=", 2)
 
-	for _, param := range params {
-		parts := strings.SplitN(param, "=", 2)
-
-		if len(parts) != 2 {
-			return nil, nil, fmt.Errorf("invalid Argon2 parameter")
+		if len(kv) != 2 {
+			return params, nil, nil, fmt.Errorf("invalid Argon2 parameter")
 		}
 
-		value, err := strconv.ParseUint(parts[1], 10, 32)
+		value, err := strconv.ParseUint(kv[1], 10, 32)
 		if err != nil {
-			return nil, nil, fmt.Errorf("invalid Argon2 parameter value")
+			return params, nil, nil, fmt.Errorf("invalid Argon2 parameter value")
 		}
 
-		switch parts[0] {
+		switch kv[0] {
 		case "m":
-			memory = uint32(value)
+			params.memory = uint32(value)
 		case "t":
-			time = uint32(value)
+			params.time = uint32(value)
 		case "p":
-			threads = uint8(value)
+			params.threads = uint8(value)
+		default:
+			return params, nil, nil, fmt.Errorf("unknown Argon2 parameter %q", kv[0])
 		}
+	}
+
+	// Refuse absurd values so a corrupted row can't make one login burn
+	// gigabytes of memory.
+	if params.memory < 8*1024 || params.memory > 1024*1024 ||
+		params.time < 1 || params.time > 10 ||
+		params.threads < 1 || params.threads > 16 {
+		return params, nil, nil, fmt.Errorf("argon2 parameters out of range")
 	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid password salt")
+		return params, nil, nil, fmt.Errorf("invalid password salt")
 	}
 
 	hash, err := base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil {
-		return nil, nil, fmt.Errorf("invalid password hash")
+	if err != nil || len(hash) < 16 {
+		return params, nil, nil, fmt.Errorf("invalid password hash")
 	}
 
-	if memory != argon2Memory ||
-		time != argon2Time ||
-		threads != argon2Threads {
-		return nil, nil, fmt.Errorf("unsupported Argon2 parameters")
-	}
-
-	return salt, hash, nil
+	return params, salt, hash, nil
 }
