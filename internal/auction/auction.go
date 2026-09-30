@@ -1,46 +1,31 @@
+// Package auction holds the auction domain: items, auctions and the rules
+// for how an auction moves through its lifecycle.
 package auction
 
-import "time"
+import (
+	"time"
 
-type Status string
-
-const (
-	StatusNotActive Status = "NOT_ACTIVE"
-	StatusActive    Status = "ACTIVE"
-	StatusCompleted Status = "COMPLETED"
+	"github.com/google/uuid"
 )
 
-type Wallet struct {
-	Available int64
-	Reserved  int64
-}
-
-type User struct {
-	ID     string
-	Wallet Wallet
-}
-
-type Auction struct {
-	ID            string
-	ItemID        string
-	OwnerID       string
-	StartingPrice int64
-	CurrentBid    int64
-	StartsAt      time.Time
-	EndsAt        time.Time
-	Status        Status
-}
 type Item struct {
-	ID          string
+	ID          uuid.UUID
+	OwnerID     uuid.UUID
 	Type        string
 	Name        string
 	Description string
+	CreatedAt   time.Time
 }
 
-type Bid struct {
-	ID        string
-	AuctionID string
-	UserID    string
-	Amount    int64
-	CreatedAt time.Time
+type Auction struct {
+	ID            uuid.UUID
+	Item          Item
+	OwnerID       uuid.UUID
+	StartingPrice int64
+	CurrentBid    *int64
+	StartsAt      time.Time
+	EndsAt        time.Time
+	Status        Status
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
