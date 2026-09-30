@@ -44,6 +44,16 @@ RETURNING ...
 - **Secrets don't linger:** the activation token is removed from the stored payload once the email has been sent.
 - A **partial index** on pending events (`WHERE processed_at IS NULL`) keeps polling cheap as the table grows.
 
+### Concurrent bidding without races, double spending or deadlocks
+
+Every bid is one transaction: lock the auction row (`SELECT … FOR UPDATE`), lock the affected wallets **in user-ID order**, decide, then write the bid, the reservation, two ledger journals, the auction update and a `bid.placed` outbox event together. An optimistic strategy (version compare-and-swap with retries) can be switched on with `BID_LOCKING=optimistic` for comparison.
+
+Tests prove it under load: 40 users bidding at once on one auction, one user trying to spend the same money on two auctions, two users outbidding each other on two auctions at the same instant (the deadlock case), and a bid racing the auction's end. Breaking the lock or the lock order makes those tests fail. See [`docs/decisions/0006`](docs/decisions/0006-bid-concurrency.md).
+
+### Double-entry ledger
+
+Money never changes in place. Every movement is a journal whose lines sum to zero, and the ledger tables are append-only (enforced by triggers). `wallet.Reconcile` recomputes all balances from the ledger. Settlement is idempotent, so a redelivered `auction.completed` event can't pay the seller twice. See [`docs/decisions/0007`](docs/decisions/0007-double-entry-ledger.md).
+
 ### Auction lifecycle as a state machine
 
 ```
@@ -126,6 +136,11 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `GET` | `/v1/auctions` | optional | List auctions, newest first: `?status=ACTIVE&owner=me&limit=20&cursor=…` |
 | `GET` | `/v1/auctions/{id}` | | Get one auction with its item |
 | `POST` | `/v1/auctions/{id}/cancel` | JWT (owner) | Cancel an auction before it starts |
+| `POST` | `/v1/auctions/{id}/bids` | JWT | Place a bid (send an `Idempotency-Key` header) |
+| `GET` | `/v1/auctions/{id}/bids` | | Bid history, newest first |
+| `GET` | `/v1/wallet` | JWT | Available and reserved balance |
+| `POST` | `/v1/wallet/deposits` | JWT | Add test funds (`Idempotency-Key` required) |
+| `GET` | `/v1/wallet/ledger` | JWT | Every money movement, newest first |
 
 Errors are always JSON: `{"error": "..."}`, plus a `fields` map for validation errors:
 
@@ -182,6 +197,8 @@ CI runs formatting checks, `go vet` and the full test suite against Postgres on 
 cmd/api             HTTP server entry point, wiring, graceful shutdown
 cmd/migrate         migration CLI (up, or -down N)
 internal/auction    auctions: state machine, service, repository, lifecycle worker, pagination
+internal/bidding    placing bids (two locking strategies), bid history, settlement
+internal/wallet     wallets, double-entry ledger, reconciliation
 internal/user       users: service, repository, Argon2id, activation tokens, JWT
 internal/auth       JWT middleware (required and optional)
 internal/outbox     outbox repository, worker and event router
@@ -201,7 +218,7 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 
 - **v0.1 – Users and auth** ✅
 - **v0.2 – [Auction management](https://github.com/Ayush1388/auctionEngine/milestone/1)** ✅: create, view, list and cancel auctions; lifecycle worker
-- **v0.3 – Bidding**: wallet reservations, concurrent bids, settlement
+- **v0.3 – Bidding** ✅: wallet reservations, concurrent bids, double-entry ledger, settlement, idempotency, anti-sniping
 - **Later**: real-time updates over WebSockets, load tests
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).

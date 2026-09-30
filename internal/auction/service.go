@@ -32,8 +32,11 @@ type CreateItemInput struct {
 type CreateInput struct {
 	Item          CreateItemInput `json:"item"`
 	StartingPrice int64           `json:"starting_price" validate:"gte=0"`
-	StartsAt      time.Time       `json:"starts_at" validate:"required"`
-	EndsAt        time.Time       `json:"ends_at" validate:"required"`
+
+	// MinIncrement is optional; 0 means the default of 1 (one paisa).
+	MinIncrement int64     `json:"min_increment" validate:"gte=0"`
+	StartsAt     time.Time `json:"starts_at" validate:"required"`
+	EndsAt       time.Time `json:"ends_at" validate:"required"`
 }
 
 type Service struct {
@@ -80,6 +83,7 @@ func (s *Service) Create(
 		ID:            uuid.New(),
 		OwnerID:       ownerID,
 		StartingPrice: input.StartingPrice,
+		MinIncrement:  max(input.MinIncrement, 1),
 		StartsAt:      input.StartsAt.UTC(),
 		EndsAt:        input.EndsAt.UTC(),
 		Status:        StatusNotActive,

@@ -46,3 +46,12 @@ func WithTx(
 
 	return nil
 }
+
+// DB is something that can both run queries and start transactions: in
+// practice *pgxpool.Pool. Services that sometimes read directly and
+// sometimes open a transaction depend on this instead of the concrete pool,
+// so tests could substitute anything that behaves the same.
+type DB interface {
+	DBTX
+	TxBeginner
+}
