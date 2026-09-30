@@ -2,10 +2,14 @@ package user_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/argon2"
 
 	"github.com/Ayush1388/auctionEngine/internal/testdb"
 	"github.com/Ayush1388/auctionEngine/internal/user"
@@ -64,6 +68,13 @@ func TestRegisterActivateLogin(t *testing.T) {
 	}
 	if event.To != "alice@example.com" || event.ActivationToken == "" {
 		t.Fatalf("unexpected event payload: %+v", event)
+	}
+
+	// A wrong password on an unactivated account says nothing about the
+	// account's state.
+	_, err = service.Login(ctx, user.LoginInput{Email: "alice@example.com", Password: "wrong-password-123"})
+	if !errors.Is(err, user.ErrInvalidCredentials) {
+		t.Fatalf("wrong password before activation: got %v, want ErrInvalidCredentials", err)
 	}
 
 	// Login is refused until the account is activated.
@@ -159,4 +170,69 @@ func TestRegisterRollsBackUserWhenOutboxFails(t *testing.T) {
 	if users != 0 {
 		t.Fatalf("user row survived a failed registration (users = %d)", users)
 	}
+}
+
+func TestResendActivationDoesNotRevealAccounts(t *testing.T) {
+	service, count := newService(t)
+	ctx := context.Background()
+
+	if err := service.ResendActivation(ctx, user.ResendActivationInput{Email: "ghost@example.com"}); err != nil {
+		t.Fatalf("unknown email: got %v, want nil", err)
+	}
+	if n := count("SELECT count(*) FROM outbox_events"); n != 0 {
+		t.Fatalf("an email was queued for an unknown address (%d events)", n)
+	}
+
+	if _, err := service.Register(ctx, user.RegisterInput{Email: "frank@example.com", Password: testPassword}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ResendActivation(ctx, user.ResendActivationInput{Email: "frank@example.com"}); err != nil {
+		t.Fatalf("resend: %v", err)
+	}
+	if n := count("SELECT count(*) FROM outbox_events"); n != 2 {
+		t.Fatalf("outbox_events = %d, want 2 (register + resend)", n)
+	}
+}
+
+func TestLoginUpgradesWeakPasswordHash(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	service := user.NewService(pool, user.NewRepository(pool), user.NewJWTService("0123456789abcdef0123456789abcdef", "test", time.Hour))
+
+	// A hash made with the minimum parameters, as if created by an older
+	// version with a lower cost.
+	weak := weakHash(t, testPassword)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO users (id, email, password_hash, activated_at) VALUES (gen_random_uuid(), 'gina@example.com', $1, now())`,
+		weak,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Login(ctx, user.LoginInput{Email: "gina@example.com", Password: testPassword}); err != nil {
+		t.Fatalf("login with old hash: %v", err)
+	}
+
+	var stored string
+	if err := pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE email = 'gina@example.com'`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored == weak || user.NeedsRehash(stored) {
+		t.Fatal("hash was not upgraded after login")
+	}
+
+	if _, err := service.Login(ctx, user.LoginInput{Email: "gina@example.com", Password: testPassword}); err != nil {
+		t.Fatalf("login after upgrade: %v", err)
+	}
+}
+
+func weakHash(t *testing.T, password string) string {
+	t.Helper()
+
+	salt := []byte("0123456789abcdef")
+	key := argon2.IDKey([]byte(password), salt, 1, 8*1024, 1, 32)
+	return fmt.Sprintf("$argon2id$v=19$m=%d,t=1,p=1$%s$%s", 8*1024,
+		base64.RawStdEncoding.EncodeToString(salt),
+		base64.RawStdEncoding.EncodeToString(key),
+	)
 }

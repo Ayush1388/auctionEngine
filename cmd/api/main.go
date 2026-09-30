@@ -108,6 +108,8 @@ func main() {
 	outboxRouter.Register(
 		email.EventTypeActivationEmail,
 		emailEventHandler,
+		// The raw token is a credential; drop it once the email is sent.
+		outbox.RedactOnSuccess("activation_token"),
 	)
 
 	// Nothing consumes auction.completed until settlement lands in v0.3.

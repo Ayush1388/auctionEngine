@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -153,11 +154,16 @@ func (s *Service) ResendActivation(
 		input.Email,
 	)
 	if err != nil {
+		// Unknown emails succeed silently. The response must not reveal
+		// whether an address has an account.
+		if errors.Is(err, ErrUserNotFound) {
+			return nil
+		}
 		return err
 	}
 
 	if existingUser.ActivatedAt != nil {
-		return ErrUserAlreadyActivated
+		return nil
 	}
 
 	rawToken, tokenHash, err := GenerateActivationToken()
@@ -175,6 +181,10 @@ func (s *Service) ResendActivation(
 			tokenHash,
 			time.Now().Add(activationTokenTTL),
 		); err != nil {
+			// Activated between our read and this update.
+			if errors.Is(err, ErrUserAlreadyActivated) {
+				return nil
+			}
 			return err
 		}
 
@@ -198,6 +208,9 @@ func (s *Service) Login(
 	)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
+			// Do the same work as a real check so timing doesn't reveal
+			// that the email isn't registered.
+			_ = CheckPassword(input.Password, dummyHash)
 			return LoginResult{}, ErrInvalidCredentials
 		}
 
@@ -207,17 +220,22 @@ func (s *Service) Login(
 		)
 	}
 
-	if existingUser.ActivatedAt == nil {
-		return LoginResult{}, ErrAccountNotActivated
-	}
-
-	// CheckPassword returns an error when the password
-	// does not match or the stored hash is invalid.
+	// Verify the password before saying anything about the account.
+	// Checking activation first would let anyone learn, without knowing
+	// the password, that an email is registered but not activated.
 	if err := CheckPassword(
 		input.Password,
 		existingUser.PasswordHash,
 	); err != nil {
 		return LoginResult{}, ErrInvalidCredentials
+	}
+
+	if existingUser.ActivatedAt == nil {
+		return LoginResult{}, ErrAccountNotActivated
+	}
+
+	if NeedsRehash(existingUser.PasswordHash) {
+		s.upgradePasswordHash(ctx, existingUser.ID, input.Password)
 	}
 
 	accessToken, err := s.jwt.GenerateToken(
@@ -258,4 +276,21 @@ func enqueueActivationEmail(
 			ActivationToken: rawToken,
 		},
 	)
+}
+
+// upgradePasswordHash re-hashes with the current parameters after a
+// successful login, the only time the plaintext password is available.
+// Failure is logged, not returned: the user has already logged in.
+func (s *Service) upgradePasswordHash(
+	ctx context.Context,
+	userID uuid.UUID,
+	password string,
+) {
+	hash, err := HashPassword(password)
+	if err == nil {
+		err = s.repository.UpdatePasswordHash(ctx, userID, hash)
+	}
+	if err != nil {
+		slog.Warn("failed to upgrade password hash", "user_id", userID, "error", err)
+	}
 }

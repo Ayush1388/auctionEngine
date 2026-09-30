@@ -264,3 +264,24 @@ func (r *Repository) UpdateActivationToken(
 
 	return nil
 }
+
+func (r *Repository) UpdatePasswordHash(
+	ctx context.Context,
+	userID uuid.UUID,
+	passwordHash string,
+) error {
+	_, err := r.db.Exec(
+		ctx,
+		`UPDATE users SET password_hash = $1 WHERE id = $2`,
+		passwordHash,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to update password hash: %w",
+			err,
+		)
+	}
+
+	return nil
+}
