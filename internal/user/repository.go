@@ -92,7 +92,8 @@ func (r *Repository) GetByEmail(
 			id,
 			email,
 			password_hash,
-			activated_at
+			activated_at,
+			role
 		FROM users
 		WHERE email = $1
 		`,
@@ -102,6 +103,7 @@ func (r *Repository) GetByEmail(
 		&user.Email,
 		&user.PasswordHash,
 		&user.ActivatedAt,
+		&user.Role,
 	)
 
 	if err != nil {
@@ -131,7 +133,8 @@ func (r *Repository) GetByID(
 			id,
 			email,
 			password_hash,
-			activated_at
+			activated_at,
+			role
 		FROM users
 		WHERE id = $1
 		`,
@@ -141,6 +144,7 @@ func (r *Repository) GetByID(
 		&user.Email,
 		&user.PasswordHash,
 		&user.ActivatedAt,
+		&user.Role,
 	)
 
 	if err != nil {

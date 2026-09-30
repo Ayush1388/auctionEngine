@@ -14,7 +14,10 @@ import (
 // the user ID stored in the request context.
 type contextKey string
 
-const userIDKey contextKey = "user_id"
+const (
+	userIDKey contextKey = "user_id"
+	roleKey   contextKey = "role"
+)
 
 // Middleware checks the Authorization: Bearer <jwt> header and, when valid,
 // stores the user ID in the request context for handlers to read with
@@ -92,6 +95,7 @@ func (m *Middleware) authenticate(
 				userIDKey,
 				claims.UserID,
 			)
+			ctx = context.WithValue(ctx, roleKey, claims.Role)
 
 			next.ServeHTTP(
 				w,
@@ -107,4 +111,33 @@ func UserIDFromContext(
 	userID, ok := ctx.Value(userIDKey).(uuid.UUID)
 
 	return userID, ok
+}
+
+// RoleFromContext returns the role from the caller's access token.
+func RoleFromContext(ctx context.Context) string {
+	role, _ := ctx.Value(roleKey).(string)
+	return role
+}
+
+// RequireRole allows the request only if the authenticated user has role.
+// Use it behind Authenticate:
+//
+//	mw.Authenticate(mw.RequireRole("admin", handler))
+//
+// 401 means "log in"; 403 means "logged in, but not allowed". Checking the
+// role from the token (not the database) keeps this free, at the cost that a
+// demoted admin keeps access until their access token expires. That is why
+// access tokens are short-lived.
+func (m *Middleware) RequireRole(role string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := UserIDFromContext(r.Context()); !ok {
+			httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if RoleFromContext(r.Context()) != role {
+			httpx.Error(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

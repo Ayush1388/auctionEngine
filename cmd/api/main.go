@@ -21,7 +21,9 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/email"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
+	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
 	"github.com/Ayush1388/auctionEngine/internal/server"
+	"github.com/Ayush1388/auctionEngine/internal/session"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
@@ -181,8 +183,35 @@ func main() {
 		jwtService,
 	)
 
+	// --------------------------------------------------
+	// Sessions and rate limiting
+	// --------------------------------------------------
+
+	sessionService := session.NewService(
+		db,
+		jwtService,
+		cfg.RefreshTokenTTL,
+	)
+
+	// In-memory token buckets: per process. v0.5 swaps in Redis so every
+	// instance shares the same buckets.
+	memoryLimiter := ratelimit.NewMemory()
+
+	var limiter ratelimit.Limiter
+	if cfg.RateLimitsEnabled {
+		limiter = memoryLimiter
+	}
+
+	clientIP, err := ratelimit.NewClientIP(cfg.TrustedProxies)
+	if err != nil {
+		logger.Error("invalid TRUSTED_PROXIES", "error", err)
+		os.Exit(1)
+	}
+
 	userHandler := handlers.NewUserHandler(
 		userService,
+		sessionService,
+		limiter,
 	)
 
 	// --------------------------------------------------
@@ -204,13 +233,23 @@ func main() {
 
 	srv := server.New(
 		cfg.Port,
-		server.Routes(
-			userHandler,
-			auctionHandler,
-			handlers.NewBidHandler(biddingService),
-			handlers.NewWalletHandler(walletService),
-			authMiddleware,
-		),
+		server.Routes(server.Deps{
+			Users:    userHandler,
+			Sessions: handlers.NewSessionHandler(sessionService),
+			Auctions: auctionHandler,
+			Bids:     handlers.NewBidHandler(biddingService),
+			Wallets:  handlers.NewWalletHandler(walletService),
+			Admin:    handlers.NewAdminHandler(walletService, outboxRepository),
+
+			Auth:     authMiddleware,
+			Limiter:  limiter,
+			ClientIP: clientIP,
+			Limits:   server.DefaultLimits(),
+
+			Logger:      logger,
+			CORSOrigins: cfg.CORSAllowedOrigins,
+			HSTS:        cfg.Environment == "production",
+		}),
 	)
 
 	// --------------------------------------------------
@@ -231,6 +270,11 @@ func main() {
 
 	workers.Go(func() {
 		outboxWorker.Run(workersCtx)
+	})
+
+	// Forget idle rate-limit buckets so the map can't grow forever.
+	workers.Go(func() {
+		memoryLimiter.RunJanitor(workersCtx, time.Minute, 10*time.Minute)
 	})
 
 	workers.Go(func() {

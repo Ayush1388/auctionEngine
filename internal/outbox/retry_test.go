@@ -102,3 +102,31 @@ func TestProcessedEventsHaveSecretsRedacted(t *testing.T) {
 		t.Fatalf("non-secret fields should be kept, got to=%q", to)
 	}
 }
+
+func TestDeadLetterCanBeRequeued(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	repo := NewRepository(pool)
+
+	if err := Enqueue(ctx, pool, "test.event", map[string]string{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE outbox_events SET failed_at = now(), attempts = 8, last_error = 'smtp down'`); err != nil {
+		t.Fatal(err)
+	}
+
+	failed, err := repo.ListFailed(ctx, 10)
+	if err != nil || len(failed) != 1 || *failed[0].LastError != "smtp down" {
+		t.Fatalf("ListFailed: %v %+v", err, failed)
+	}
+
+	if err := repo.RetryFailed(ctx, failed[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if events, _ := repo.Claim(ctx, 10); len(events) != 1 {
+		t.Fatalf("requeued event not claimable: %d", len(events))
+	}
+	if err := repo.RetryFailed(ctx, failed[0].ID); !errors.Is(err, ErrNotFailed) {
+		t.Fatalf("retrying a non-failed event: %v", err)
+	}
+}
