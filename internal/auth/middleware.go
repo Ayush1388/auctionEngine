@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Ayush1338/auctionEngine/internal/user"
+	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/google/uuid"
 )
 

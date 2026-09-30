@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Ayush1338/auctionEngine/internal/auth"
-	"github.com/Ayush1338/auctionEngine/internal/handlers"
+	"github.com/Ayush1388/auctionEngine/internal/auth"
+	"github.com/Ayush1388/auctionEngine/internal/handlers"
 )
 
 type Server struct {

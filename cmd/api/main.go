@@ -11,14 +11,14 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"github.com/Ayush1338/auctionEngine/internal/auth"
-	"github.com/Ayush1338/auctionEngine/internal/config"
-	"github.com/Ayush1338/auctionEngine/internal/database"
-	"github.com/Ayush1338/auctionEngine/internal/email"
-	"github.com/Ayush1338/auctionEngine/internal/handlers"
-	"github.com/Ayush1338/auctionEngine/internal/outbox"
-	"github.com/Ayush1338/auctionEngine/internal/server"
-	"github.com/Ayush1338/auctionEngine/internal/user"
+	"github.com/Ayush1388/auctionEngine/internal/auth"
+	"github.com/Ayush1388/auctionEngine/internal/config"
+	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/email"
+	"github.com/Ayush1388/auctionEngine/internal/handlers"
+	"github.com/Ayush1388/auctionEngine/internal/outbox"
+	"github.com/Ayush1388/auctionEngine/internal/server"
+	"github.com/Ayush1388/auctionEngine/internal/user"
 )
 
 func main() {

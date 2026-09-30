@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Ayush1338/auctionEngine/internal/config"
-	"github.com/Ayush1338/auctionEngine/internal/database"
-	"github.com/Ayush1338/auctionEngine/internal/migration"
+	"github.com/Ayush1388/auctionEngine/internal/config"
+	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/migration"
 	"github.com/joho/godotenv"
 )
 
