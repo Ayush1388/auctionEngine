@@ -25,6 +25,7 @@ func newUserMux(t *testing.T) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/users/register", h.Register)
 	mux.HandleFunc("POST /v1/users/login", h.Login)
+	mux.HandleFunc("POST /v1/users/resend-activation", h.ResendActivation)
 	mux.Handle("GET /v1/users/me", mw.Authenticate(http.HandlerFunc(h.Me)))
 	return mux
 }
@@ -105,4 +106,17 @@ func mustJSON(t *testing.T, v any) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+func TestResendActivationAlways204(t *testing.T) {
+	mux := newUserMux(t)
+
+	do(t, mux, "POST", "/v1/users/register", `{"email":"hank@example.com","password":"correct-horse-battery-staple"}`)
+
+	for _, email := range []string{"hank@example.com", "nobody@example.com"} {
+		w, body := do(t, mux, "POST", "/v1/users/resend-activation", `{"email":"`+email+`"}`)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("%s: got %d %v, want 204 either way", email, w.Code, body)
+		}
+	}
 }
