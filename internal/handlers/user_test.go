@@ -96,3 +96,13 @@ func TestLoginRequiresActivationAndMeRequiresToken(t *testing.T) {
 		t.Fatalf("me without token: %d %v", w.Code, body)
 	}
 }
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}

@@ -167,3 +167,53 @@ func TestGetAuctionHTTP(t *testing.T) {
 		t.Fatalf("malformed id: %d", w.Code)
 	}
 }
+
+func TestListAuctionsHTTP(t *testing.T) {
+	a := newAPI(t)
+	_, aliceToken := a.newUser()
+	_, bobToken := a.newUser()
+
+	for i := 0; i < 3; i++ {
+		a.createAuction(aliceToken, time.Hour, time.Hour)
+	}
+	a.createAuction(bobToken, time.Hour, time.Hour)
+
+	w, body := a.request("GET", "/v1/auctions?limit=2", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("list: %d %v", w.Code, body)
+	}
+	if got := len(body["auctions"].([]any)); got != 2 || body["next_cursor"] == nil {
+		t.Fatalf("first page: %d auctions, next_cursor=%v", got, body["next_cursor"])
+	}
+
+	w, body = a.request("GET", "/v1/auctions?limit=2&cursor="+body["next_cursor"].(string), "", "")
+	if got := len(body["auctions"].([]any)); w.Code != http.StatusOK || got != 2 || body["next_cursor"] != nil {
+		t.Fatalf("last page: %d, %d auctions, next_cursor=%v", w.Code, got, body["next_cursor"])
+	}
+
+	w, body = a.request("GET", "/v1/auctions?owner=me", aliceToken, "")
+	if got := len(body["auctions"].([]any)); w.Code != http.StatusOK || got != 3 {
+		t.Fatalf("owner=me: %d, %d auctions", w.Code, got)
+	}
+
+	w, _ = a.request("GET", "/v1/auctions?owner=me", "", "")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("owner=me without token: %d", w.Code)
+	}
+
+	w, _ = a.request("GET", "/v1/auctions", "not-a-real-token", "")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("bad token on a public route should still be rejected: %d", w.Code)
+	}
+
+	w, body = a.request("GET", "/v1/auctions?status=nope&limit=500", "", "")
+	fields, _ := body["fields"].(map[string]any)
+	if w.Code != http.StatusBadRequest || fields["status"] == nil || fields["limit"] == nil {
+		t.Fatalf("bad params: %d %v", w.Code, body)
+	}
+
+	w, body = a.request("GET", "/v1/auctions?status=CANCELLED", "", "")
+	if w.Code != http.StatusOK || string(mustJSON(t, body["auctions"])) != "[]" {
+		t.Fatalf("empty result should be [] not null: %v", body)
+	}
+}
