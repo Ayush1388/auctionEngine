@@ -108,3 +108,60 @@ func (h *AuctionHandler) Get(w http.ResponseWriter, r *http.Request) {
 		httpx.ServerError(w, r, err)
 	}
 }
+
+type listResponse struct {
+	Auctions   []auctionResponse `json:"auctions"`
+	NextCursor *string           `json:"next_cursor"`
+}
+
+// List handles GET /v1/auctions?status=&owner=me&limit=&cursor=
+//
+// owner=me needs a token; everything else is public.
+func (h *AuctionHandler) List(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+
+	q := auction.ListQuery{
+		Status: query.Get("status"),
+		Limit:  query.Get("limit"),
+		Cursor: query.Get("cursor"),
+	}
+
+	switch owner := query.Get("owner"); owner {
+	case "":
+	case "me":
+		userID, ok := auth.UserIDFromContext(r.Context())
+		if !ok {
+			httpx.Error(w, http.StatusUnauthorized, "owner=me requires authentication")
+			return
+		}
+		q.OwnerID = userID
+	default:
+		problems := &validation.Error{}
+		problems.Add("owner", "must be \"me\"")
+		httpx.ValidationError(w, problems)
+		return
+	}
+
+	page, err := h.service.List(r.Context(), q)
+	if err != nil {
+		if errors.Is(err, validation.ErrInvalid) {
+			httpx.BadRequest(w, err)
+			return
+		}
+		httpx.ServerError(w, r, err)
+		return
+	}
+
+	response := listResponse{
+		Auctions: make([]auctionResponse, len(page.Auctions)),
+	}
+	for i, a := range page.Auctions {
+		response.Auctions[i] = toAuctionResponse(a)
+	}
+	if page.NextCursor != nil {
+		next := page.NextCursor.Encode()
+		response.NextCursor = &next
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, response)
+}
