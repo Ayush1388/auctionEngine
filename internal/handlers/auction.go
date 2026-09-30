@@ -165,3 +165,39 @@ func (h *AuctionHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	httpx.WriteJSON(w, http.StatusOK, response)
 }
+
+// Cancel handles POST /v1/auctions/{id}/cancel.
+//
+//	401  not logged in
+//	403  logged in, but not the owner
+//	404  no such auction
+//	409  the auction is no longer in a state that can be cancelled
+func (h *AuctionHandler) Cancel(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid auction id")
+		return
+	}
+
+	cancelled, err := h.service.Cancel(r.Context(), userID, id)
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusOK, toAuctionResponse(cancelled))
+	case errors.Is(err, auction.ErrNotFound):
+		httpx.Error(w, http.StatusNotFound, "auction not found")
+	case errors.Is(err, auction.ErrForbidden):
+		httpx.Error(w, http.StatusForbidden, "only the owner can cancel this auction")
+	case errors.Is(err, auction.ErrAlreadyStarted):
+		httpx.Error(w, http.StatusConflict, "auction has already started")
+	case errors.Is(err, auction.ErrInvalidTransition):
+		httpx.Error(w, http.StatusConflict, "auction can no longer be cancelled")
+	default:
+		httpx.ServerError(w, r, err)
+	}
+}

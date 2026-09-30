@@ -93,3 +93,24 @@ func TestParseStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestSourcesOf(t *testing.T) {
+	tests := map[Status][]Status{
+		StatusActive:    {StatusNotActive},
+		StatusCompleted: {StatusActive},
+		StatusCancelled: {StatusNotActive},
+		StatusNotActive: nil,
+	}
+
+	for target, want := range tests {
+		got := SourcesOf(target)
+		if len(got) != len(want) {
+			t.Fatalf("SourcesOf(%s) = %v, want %v", target, got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("SourcesOf(%s) = %v, want %v", target, got, want)
+			}
+		}
+	}
+}
