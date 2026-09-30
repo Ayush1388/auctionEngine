@@ -44,7 +44,7 @@ RETURNING ...
 
 ### Auth and accounts
 
-- Registration with request validation and **bcrypt** password hashing
+- Registration with request validation and **Argon2id** password hashing
 - **Account activation**: only a hash of the token is stored in the database, and tokens expire after 24 hours; a resend endpoint is included
 - **JWT** login and an authentication middleware protecting private routes
 
@@ -122,7 +122,7 @@ go test ./...
 ```
 cmd/api          HTTP server entry point, wiring, graceful shutdown
 cmd/migrate      migration runner CLI
-internal/user    users: service, repository, bcrypt, activation tokens, JWT
+internal/user    users: service, repository, Argon2id, activation tokens, JWT
 internal/auth    JWT middleware
 internal/outbox  outbox repository (claim / retry / mark processed) and worker
 internal/email   SMTP service and outbox event handler
@@ -133,8 +133,11 @@ migrations/      versioned up/down SQL
 
 ## Roadmap
 
-- [ ] Auction CRUD and a scheduler that moves auctions through `NOT_ACTIVE → ACTIVE → COMPLETED`
-- [ ] Placing bids with **wallet reservations**: reserve funds when a bid is placed, release them when the bidder is outbid, all inside a serializable transaction
-- [ ] Settlement into `wallet_transactions` when an auction closes
-- [ ] Real-time bid updates over WebSockets
-- [ ] Integration tests against a real Postgres, plus load-test results
+Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) and grouped into milestones:
+
+- **v0.1 – Users and auth** ✅
+- **v0.2 – [Auction management](https://github.com/Ayush1388/auctionEngine/milestone/1)**: create, view, list and cancel auctions; lifecycle worker
+- **v0.3 – Bidding**: wallet reservations, concurrent bids, settlement
+- **Later**: real-time updates over WebSockets, load tests
+
+Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
