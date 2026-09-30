@@ -1,7 +1,10 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -64,10 +67,28 @@ func New(
 	}
 }
 
+// Start blocks until the server stops. It returns nil after a graceful
+// Shutdown and an error if the server failed, such as the port being taken.
 func (s *Server) Start() error {
-	return s.httpServer.ListenAndServe()
+	return ignoreClosed(s.httpServer.ListenAndServe())
 }
 
-func (s *Server) Shutdown() error {
-	return s.httpServer.Close()
+// Serve is like Start but uses an existing listener. Tests use it to pick a
+// free port.
+func (s *Server) Serve(l net.Listener) error {
+	return ignoreClosed(s.httpServer.Serve(l))
+}
+
+// Shutdown stops accepting new connections and waits for in-flight
+// requests to finish, or for ctx to expire. (http.Server.Close, which this
+// used to call, drops in-flight requests immediately.)
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.httpServer.Shutdown(ctx)
+}
+
+func ignoreClosed(err error) error {
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }

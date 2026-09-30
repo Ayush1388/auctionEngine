@@ -147,6 +147,34 @@ func (r *Repository) MarkProcessed(
 	return nil
 }
 
+// Release unlocks a claimed event that was never attempted, and undoes the
+// attempt counted when it was claimed.
+func (r *Repository) Release(
+	ctx context.Context,
+	id uuid.UUID,
+) error {
+	_, err := r.db.Exec(
+		ctx,
+		`
+		UPDATE outbox_events
+		SET
+			locked_at = NULL,
+			attempts = GREATEST(attempts - 1, 0)
+		WHERE id = $1
+		  AND processed_at IS NULL
+		`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to release outbox event: %w",
+			err,
+		)
+	}
+
+	return nil
+}
+
 func (r *Repository) Retry(
 	ctx context.Context,
 	id uuid.UUID,
