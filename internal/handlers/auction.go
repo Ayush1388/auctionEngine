@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/httpx"
@@ -83,6 +85,25 @@ func (h *AuctionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusCreated, toAuctionResponse(created))
 	case errors.Is(err, validation.ErrInvalid):
 		httpx.BadRequest(w, err)
+	default:
+		httpx.ServerError(w, r, err)
+	}
+}
+
+// Get handles GET /v1/auctions/{id}. Auctions are public.
+func (h *AuctionHandler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid auction id")
+		return
+	}
+
+	found, err := h.service.Get(r.Context(), id)
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusOK, toAuctionResponse(found))
+	case errors.Is(err, auction.ErrNotFound):
+		httpx.Error(w, http.StatusNotFound, "auction not found")
 	default:
 		httpx.ServerError(w, r, err)
 	}

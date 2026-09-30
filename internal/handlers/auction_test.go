@@ -140,3 +140,30 @@ func TestCreateAuctionIgnoresOwnerInBody(t *testing.T) {
 		t.Fatalf("got %d, want 400 for owner_id in body", w.Code)
 	}
 }
+
+func TestGetAuctionHTTP(t *testing.T) {
+	a := newAPI(t)
+	_, token := a.newUser()
+	created := a.createAuction(token, time.Hour, time.Hour)
+	id := created["id"].(string)
+
+	// Public: no token needed.
+	w, body := a.request("GET", "/v1/auctions/"+id, "", "")
+	if w.Code != http.StatusOK || body["id"] != id {
+		t.Fatalf("get: %d %v", w.Code, body)
+	}
+	item, _ := body["item"].(map[string]any)
+	if item["name"] != "Vintage camera" {
+		t.Fatalf("item missing from response: %v", body)
+	}
+
+	w, _ = a.request("GET", "/v1/auctions/"+uuid.NewString(), "", "")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unknown id: %d", w.Code)
+	}
+
+	w, _ = a.request("GET", "/v1/auctions/not-a-uuid", "", "")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("malformed id: %d", w.Code)
+	}
+}

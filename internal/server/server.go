@@ -37,6 +37,7 @@ func Routes(
 
 	// Auctions
 	mux.Handle("POST /v1/auctions", protected(auctionHandler.Create))
+	mux.HandleFunc("GET /v1/auctions/{id}", auctionHandler.Get)
 
 	return mux
 }

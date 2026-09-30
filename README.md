@@ -90,6 +90,7 @@ RETURNING ...
 | `POST` | `/v1/users/login` | | Get a JWT |
 | `GET` | `/v1/users/me` | JWT | Current user |
 | `POST` | `/v1/auctions` | JWT | List an item for auction |
+| `GET` | `/v1/auctions/{id}` | | Get one auction with its item |
 
 ## Running locally
 
