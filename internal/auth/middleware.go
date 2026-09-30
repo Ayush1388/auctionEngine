@@ -10,10 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// contextKey is unexported so no other package can collide with, or forge,
+// the user ID stored in the request context.
 type contextKey string
 
 const userIDKey contextKey = "user_id"
 
+// Middleware checks the Authorization: Bearer <jwt> header and, when valid,
+// stores the user ID in the request context for handlers to read with
+// UserIDFromContext. This is authentication (who are you?). Authorization
+// (may you do this?) happens in the services, e.g. auction.Service.Cancel.
 type Middleware struct {
 	jwt *user.JWTService
 }

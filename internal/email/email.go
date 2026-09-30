@@ -1,3 +1,9 @@
+// Package email sends transactional email over SMTP.
+//
+// Nothing calls SendActivationEmail from a request handler. Emails are
+// queued in the outbox inside the same database transaction as the change
+// that caused them, and the outbox worker calls the EventHandler in
+// handler.go. See docs/decisions/0001-transactional-outbox.md.
 package email
 
 import (
@@ -39,6 +45,7 @@ func (s *Service) SendActivationEmail(
 ) error {
 	subject := "Activate your Auction Engine account"
 
+	// The token is base64url, which is already safe inside a URL.
 	activationURL := fmt.Sprintf(
 		"%s/v1/users/activate?token=%s",
 		s.baseURL,
@@ -53,6 +60,10 @@ func (s *Service) SendActivationEmail(
 		activationURL,
 	)
 
+	// A raw RFC 5322 message: headers, a blank line, then the body.
+	// "to" comes from user input, but it passed email validation at
+	// registration, which rejects \r and \n, so it cannot inject extra
+	// headers (a classic SMTP header-injection attack).
 	message := []byte(
 		"From: " + s.from + "\r\n" +
 			"To: " + to + "\r\n" +
@@ -62,6 +73,7 @@ func (s *Service) SendActivationEmail(
 			body,
 	)
 
+	// Local dev servers (MailHog, Mailtrap) may not need credentials.
 	var auth smtp.Auth
 
 	if s.username != "" && s.password != "" {

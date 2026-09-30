@@ -1,3 +1,16 @@
+// Package outbox implements the transactional outbox pattern.
+//
+// Problem: a single action often has to change the database AND tell
+// another system (send an email, publish to Kafka). Those are two systems
+// with no shared transaction, so either one can succeed while the other
+// fails: a user without their activation email, or an email for a user
+// whose insert rolled back.
+//
+// Fix: write the message into the outbox_events table in the SAME
+// transaction as the change (Enqueue). Either both commit or neither does.
+// A background Worker then reads pending events and delivers them,
+// retrying until they succeed. Delivery is therefore at-least-once, and
+// handlers must tolerate seeing an event twice.
 package outbox
 
 import (
@@ -12,6 +25,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/database"
 )
 
+// Event is one row of outbox_events as the worker sees it.
 type Event struct {
 	ID          uuid.UUID
 	EventType   string
@@ -30,6 +44,13 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	}
 }
 
+// Claim locks up to limit pending events for this worker and returns them.
+//
+// FOR UPDATE SKIP LOCKED is what makes many workers safe: each one locks
+// different rows, and rows another worker already locked are skipped
+// instead of waited on. locked_at is a lease: if a worker dies holding
+// events, another worker takes them over once the lease is 5 minutes old.
+// attempts is incremented here, at claim time, so a crash still counts.
 func (r *Repository) Claim(
 	ctx context.Context,
 	limit int,

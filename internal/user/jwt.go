@@ -8,6 +8,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// JWTService issues and verifies access tokens.
+//
+// A JWT is header.payload.signature. The payload (claims) is only base64,
+// so anyone can read it; the HMAC-SHA256 signature is what stops anyone
+// from changing it. Because the server can verify a token with just the
+// secret, it needs no session lookup per request (stateless auth). The cost
+// is that a token can't be revoked before it expires, which is why expiry
+// matters (see JWT_EXPIRATION_HOURS).
 type JWTService struct {
 	secret     []byte
 	issuer     string
@@ -65,6 +73,9 @@ func (s *JWTService) ValidateToken(
 		tokenString,
 		&Claims{},
 		func(token *jwt.Token) (any, error) {
+			// Pin the algorithm. Without this check, a forged token
+			// with "alg": "none" or an RS256/HS256 confusion attack
+			// could pass verification.
 			if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 				return nil, fmt.Errorf(
 					"unexpected signing method: %s",

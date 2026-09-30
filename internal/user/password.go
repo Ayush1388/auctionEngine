@@ -19,6 +19,17 @@ const (
 	argon2SaltLen        = 16
 )
 
+// HashPassword hashes password with Argon2id and a fresh random salt.
+//
+// Why a slow, memory-hard hash: passwords are low-entropy, so an attacker
+// who steals the table will try billions of guesses. Argon2id makes each
+// guess cost 64 MiB of memory, which is what makes GPU cracking expensive.
+// The random salt means two users with the same password get different
+// hashes, so precomputed tables are useless.
+//
+// Output is the standard PHC string:
+//
+//	$argon2id$v=19$m=65536,t=1,p=4$<salt>$<hash>
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, argon2SaltLen)
 
