@@ -79,17 +79,19 @@ func (r *Repository) Create(
 			item_id,
 			owner_id,
 			starting_price,
+			min_increment,
 			starts_at,
 			ends_at,
 			status
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at
 		`,
 		a.ID,
 		a.Item.ID,
 		a.OwnerID,
 		a.StartingPrice,
+		a.MinIncrement,
 		a.StartsAt,
 		a.EndsAt,
 		a.Status,
@@ -104,13 +106,25 @@ func (r *Repository) Create(
 	return nil
 }
 
+// SelectAuction and ScanAuction are exported so the bidding package can
+// read auctions with exactly the same columns (including under FOR UPDATE).
+const SelectAuction = selectAuction
+
+func ScanAuction(row pgx.Row) (Auction, error) { return scanAuction(row) }
+
 // selectAuction is shared by every query that returns full auctions.
 const selectAuction = `
 	SELECT
 		a.id,
 		a.owner_id,
 		a.starting_price,
+		a.min_increment,
 		a.current_bid,
+		a.current_bidder_id,
+		a.bid_count,
+		a.version,
+		a.extensions,
+		a.settled_at,
 		a.starts_at,
 		a.ends_at,
 		a.status,
@@ -133,7 +147,13 @@ func scanAuction(row pgx.Row) (Auction, error) {
 		&a.ID,
 		&a.OwnerID,
 		&a.StartingPrice,
+		&a.MinIncrement,
 		&a.CurrentBid,
+		&a.CurrentBidderID,
+		&a.BidCount,
+		&a.Version,
+		&a.Extensions,
+		&a.SettledAt,
 		&a.StartsAt,
 		&a.EndsAt,
 		&a.Status,

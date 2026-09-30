@@ -119,7 +119,8 @@ func (r *Repository) Transition(
 		UPDATE auctions
 		SET
 			status = $2,
-			updated_at = now()
+			updated_at = now(),
+			version = version + 1
 		WHERE
 			id = $1
 			AND status = ANY($3)

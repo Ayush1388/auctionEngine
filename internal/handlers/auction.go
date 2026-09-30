@@ -31,22 +31,34 @@ type itemResponse struct {
 }
 
 type auctionResponse struct {
-	ID            string       `json:"id"`
-	OwnerID       string       `json:"owner_id"`
-	Item          itemResponse `json:"item"`
-	StartingPrice int64        `json:"starting_price"`
-	CurrentBid    *int64       `json:"current_bid"`
-	StartsAt      time.Time    `json:"starts_at"`
-	EndsAt        time.Time    `json:"ends_at"`
-	Status        string       `json:"status"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
+	ID              string       `json:"id"`
+	OwnerID         string       `json:"owner_id"`
+	Item            itemResponse `json:"item"`
+	StartingPrice   int64        `json:"starting_price"`
+	MinIncrement    int64        `json:"min_increment"`
+	CurrentBid      *int64       `json:"current_bid"`
+	CurrentBidderID *string      `json:"current_bidder_id"`
+	BidCount        int          `json:"bid_count"`
+	Extensions      int          `json:"extensions"`
+	SettledAt       *time.Time   `json:"settled_at"`
+	StartsAt        time.Time    `json:"starts_at"`
+	EndsAt          time.Time    `json:"ends_at"`
+	Status          string       `json:"status"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
 }
 
 func toAuctionResponse(a auction.Auction) auctionResponse {
+	var bidder *string
+	if a.CurrentBidderID != nil {
+		s := a.CurrentBidderID.String()
+		bidder = &s
+	}
+
 	return auctionResponse{
-		ID:      a.ID.String(),
-		OwnerID: a.OwnerID.String(),
+		CurrentBidderID: bidder,
+		ID:              a.ID.String(),
+		OwnerID:         a.OwnerID.String(),
 		Item: itemResponse{
 			ID:          a.Item.ID.String(),
 			Name:        a.Item.Name,
@@ -54,7 +66,11 @@ func toAuctionResponse(a auction.Auction) auctionResponse {
 			Description: a.Item.Description,
 		},
 		StartingPrice: a.StartingPrice,
+		MinIncrement:  a.MinIncrement,
 		CurrentBid:    a.CurrentBid,
+		BidCount:      a.BidCount,
+		Extensions:    a.Extensions,
+		SettledAt:     a.SettledAt,
 		StartsAt:      a.StartsAt.UTC(),
 		EndsAt:        a.EndsAt.UTC(),
 		Status:        string(a.Status),

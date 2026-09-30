@@ -10,7 +10,7 @@ import (
 
 func TestUpIsIdempotent(t *testing.T) {
 	pool := testdb.New(t)
-	runner := migration.NewRunner(pool, testdb.MigrationsDir(t))
+	runner := migration.NewRunner(pool, testdb.MigrationsDir(t)).Quiet()
 
 	// testdb.New already applied everything; a second run must be a no-op.
 	if err := runner.Up(context.Background()); err != nil {
@@ -20,7 +20,7 @@ func TestUpIsIdempotent(t *testing.T) {
 
 func TestDownAllThenUpAgain(t *testing.T) {
 	pool := testdb.New(t)
-	runner := migration.NewRunner(pool, testdb.MigrationsDir(t))
+	runner := migration.NewRunner(pool, testdb.MigrationsDir(t)).Quiet()
 	ctx := context.Background()
 
 	var applied int

@@ -36,6 +36,10 @@ type Config struct {
 	JWTSecret     string
 	JWTIssuer     string
 	JWTExpiration time.Duration
+
+	// BidLocking is "pessimistic" (default) or "optimistic"; see
+	// internal/bidding/service.go for the trade-off.
+	BidLocking string
 }
 
 func Load() (Config, error) {
@@ -133,6 +137,16 @@ func Load() (Config, error) {
 		)
 	}
 
+	bidLocking := os.Getenv("BID_LOCKING")
+	if bidLocking == "" {
+		bidLocking = "pessimistic"
+	}
+	if bidLocking != "pessimistic" && bidLocking != "optimistic" {
+		return Config{}, fmt.Errorf(
+			"BID_LOCKING must be pessimistic or optimistic",
+		)
+	}
+
 	if jwtExpirationHours <= 0 {
 		return Config{}, fmt.Errorf(
 			"JWT_EXPIRATION_HOURS must be greater than zero",
@@ -155,5 +169,7 @@ func Load() (Config, error) {
 		JWTSecret:     jwtSecret,
 		JWTIssuer:     jwtIssuer,
 		JWTExpiration: time.Duration(jwtExpirationHours) * time.Hour,
+
+		BidLocking: bidLocking,
 	}, nil
 }

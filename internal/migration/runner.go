@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ var ErrMissingDownMigration = errors.New("missing down migration")
 type Runner struct {
 	db  *pgxpool.Pool
 	dir string
+	out io.Writer // progress messages; os.Stdout by default
 }
 
 type Migration struct {
@@ -41,7 +43,14 @@ func NewRunner(db *pgxpool.Pool, dir string) *Runner {
 	return &Runner{
 		db:  db,
 		dir: dir,
+		out: os.Stdout,
 	}
+}
+
+// Quiet discards progress messages (tests use it).
+func (r *Runner) Quiet() *Runner {
+	r.out = io.Discard
+	return r
 }
 
 // Up applies every migration that has not been applied yet, in version order.
@@ -62,7 +71,7 @@ func (r *Runner) Up(ctx context.Context) error {
 				continue
 			}
 
-			if err := apply(ctx, conn, migration); err != nil {
+			if err := apply(ctx, conn, migration, r.out); err != nil {
 				return err
 			}
 		}
@@ -97,7 +106,7 @@ func (r *Runner) Down(ctx context.Context, steps int) error {
 				continue
 			}
 
-			if err := rollback(ctx, conn, migration); err != nil {
+			if err := rollback(ctx, conn, migration, r.out); err != nil {
 				return err
 			}
 
@@ -228,8 +237,9 @@ func apply(
 	ctx context.Context,
 	conn *pgxpool.Conn,
 	migration Migration,
+	out io.Writer,
 ) error {
-	return runInTx(ctx, conn, migration.UpPath, migration.Version, "applied", func(tx pgx.Tx) error {
+	return runInTx(ctx, conn, out, migration.UpPath, migration.Version, "applied", func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "INSERT INTO schema_migrations (version) VALUES ($1)", migration.Version)
 		return err
 	})
@@ -239,12 +249,13 @@ func rollback(
 	ctx context.Context,
 	conn *pgxpool.Conn,
 	migration Migration,
+	out io.Writer,
 ) error {
 	if _, err := os.Stat(migration.DownPath); errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("%w for %03d", ErrMissingDownMigration, migration.Version)
 	}
 
-	return runInTx(ctx, conn, migration.DownPath, migration.Version, "rolled back", func(tx pgx.Tx) error {
+	return runInTx(ctx, conn, out, migration.DownPath, migration.Version, "rolled back", func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "DELETE FROM schema_migrations WHERE version = $1", migration.Version)
 		return err
 	})
@@ -255,6 +266,7 @@ func rollback(
 func runInTx(
 	ctx context.Context,
 	conn *pgxpool.Conn,
+	out io.Writer,
 	path string,
 	version int,
 	verb string,
@@ -283,7 +295,7 @@ func runInTx(
 		return fmt.Errorf("failed to commit migration %03d: %w", version, err)
 	}
 
-	fmt.Printf("migration %03d %s\n", version, verb)
+	fmt.Fprintf(out, "migration %03d %s\n", version, verb)
 
 	return nil
 }

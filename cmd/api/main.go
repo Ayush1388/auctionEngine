@@ -15,6 +15,7 @@ import (
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
+	"github.com/Ayush1388/auctionEngine/internal/bidding"
 	"github.com/Ayush1388/auctionEngine/internal/config"
 	"github.com/Ayush1388/auctionEngine/internal/database"
 	"github.com/Ayush1388/auctionEngine/internal/email"
@@ -22,6 +23,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/server"
 	"github.com/Ayush1388/auctionEngine/internal/user"
+	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
 
 // main is the composition root: the one place that reads configuration,
@@ -117,15 +119,35 @@ func main() {
 		outbox.RedactOnSuccess("activation_token"),
 	)
 
-	// Nothing consumes auction.completed until settlement lands in v0.3.
-	// Acknowledge it so it isn't retried forever.
+	// --------------------------------------------------
+	// Bidding and wallets
+	// --------------------------------------------------
+
+	biddingService := bidding.NewService(
+		db,
+		bidding.Strategy(cfg.BidLocking),
+	)
+
+	walletService := wallet.NewService(db)
+
+	// Completing an auction triggers settlement: the winner's reserved
+	// money moves to the seller. Idempotent, because the outbox may
+	// deliver an event more than once.
 	outboxRouter.Register(
 		auction.EventTypeCompleted,
-		outbox.HandlerFunc(func(ctx context.Context, event outbox.Event) error {
-			logger.Info("auction completed", "event_id", event.ID)
-			return nil
-		}),
+		biddingService.SettlementHandler(),
 	)
+
+	// bid.placed and auction.settled have no consumer yet (WebSockets and
+	// Kafka arrive later). Acknowledge them so they aren't retried.
+	for _, eventType := range []string{bidding.EventTypePlaced, bidding.EventTypeSettled} {
+		outboxRouter.Register(
+			eventType,
+			outbox.HandlerFunc(func(ctx context.Context, event outbox.Event) error {
+				return nil
+			}),
+		)
+	}
 
 	outboxWorker := outbox.NewWorker(
 		outboxRepository,
@@ -185,6 +207,8 @@ func main() {
 		server.Routes(
 			userHandler,
 			auctionHandler,
+			handlers.NewBidHandler(biddingService),
+			handlers.NewWalletHandler(walletService),
 			authMiddleware,
 		),
 	)

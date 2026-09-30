@@ -23,7 +23,7 @@ import (
 // New creates a fresh schema, runs every migration into it and returns a
 // pool whose search_path points at that schema. The schema is dropped when
 // the test finishes.
-func New(t *testing.T) *pgxpool.Pool {
+func New(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
@@ -75,7 +75,7 @@ func New(t *testing.T) *pgxpool.Pool {
 		}
 	})
 
-	if err := migration.NewRunner(pool, MigrationsDir(t)).Up(ctx); err != nil {
+	if err := migration.NewRunner(pool, MigrationsDir(t)).Quiet().Up(ctx); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
@@ -84,7 +84,7 @@ func New(t *testing.T) *pgxpool.Pool {
 
 // MigrationsDir finds the repository's migrations folder by walking up
 // from the test's working directory to the directory holding go.mod.
-func MigrationsDir(t *testing.T) string {
+func MigrationsDir(t testing.TB) string {
 	t.Helper()
 
 	dir, err := os.Getwd()

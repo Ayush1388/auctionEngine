@@ -21,6 +21,8 @@ type Server struct {
 func Routes(
 	userHandler *handlers.UserHandler,
 	auctionHandler *handlers.AuctionHandler,
+	bidHandler *handlers.BidHandler,
+	walletHandler *handlers.WalletHandler,
 	authMiddleware *auth.Middleware,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -43,6 +45,15 @@ func Routes(
 	mux.Handle("GET /v1/auctions", authMiddleware.Optional(http.HandlerFunc(auctionHandler.List)))
 	mux.HandleFunc("GET /v1/auctions/{id}", auctionHandler.Get)
 	mux.Handle("POST /v1/auctions/{id}/cancel", protected(auctionHandler.Cancel))
+
+	// Bidding
+	mux.Handle("POST /v1/auctions/{id}/bids", protected(bidHandler.Place))
+	mux.HandleFunc("GET /v1/auctions/{id}/bids", bidHandler.History)
+
+	// Wallet
+	mux.Handle("GET /v1/wallet", protected(walletHandler.Get))
+	mux.Handle("POST /v1/wallet/deposits", protected(walletHandler.Deposit))
+	mux.Handle("GET /v1/wallet/ledger", protected(walletHandler.Ledger))
 
 	return mux
 }
