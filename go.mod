@@ -1,4 +1,4 @@
-module github.com/Ayush1338/auctionEngine
+module github.com/Ayush1388/auctionEngine
 
 go 1.26.0
 

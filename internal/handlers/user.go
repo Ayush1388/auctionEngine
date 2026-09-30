@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/Ayush1338/auctionEngine/internal/auth"
-	"github.com/Ayush1338/auctionEngine/internal/user"
+	"github.com/Ayush1388/auctionEngine/internal/auth"
+	"github.com/Ayush1388/auctionEngine/internal/user"
 )
 
 type UserHandler struct {

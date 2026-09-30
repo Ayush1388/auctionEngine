@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Ayush1338/auctionEngine/internal/outbox"
+	"github.com/Ayush1388/auctionEngine/internal/outbox"
 )
 
 type EventHandler struct {
