@@ -36,13 +36,19 @@ func do(t *testing.T, h http.Handler, method, path, body string) (*httptest.Resp
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 
+	return w, decode(t, w)
+}
+
+func decode(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+
 	var decoded map[string]any
 	if w.Body.Len() > 0 {
 		if err := json.Unmarshal(w.Body.Bytes(), &decoded); err != nil {
 			t.Fatalf("response is not JSON: %q", w.Body.String())
 		}
 	}
-	return w, decoded
+	return decoded
 }
 
 func TestRegisterHTTP(t *testing.T) {
