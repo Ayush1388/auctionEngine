@@ -11,6 +11,9 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/validation"
 )
 
+// UserHandler is the HTTP layer for users. Handlers only translate: JSON in,
+// call the service, map the result or error to a status code, JSON out.
+// Business rules live in user.Service so they can be tested without HTTP.
 type UserHandler struct {
 	service *user.Service
 }

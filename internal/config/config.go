@@ -1,3 +1,13 @@
+// Package config loads runtime settings from environment variables.
+//
+// Why environment variables (the "12-factor app" rule): the same compiled
+// binary runs in development, CI and production; only its environment
+// changes. Secrets such as JWT_SECRET and SMTP_PASSWORD never live in the
+// code or in git (.env is gitignored).
+//
+// Load fails fast: a missing or invalid setting stops the process at start-up
+// with a clear message, instead of surfacing as a confusing error on the
+// first request that needs it.
 package config
 
 import (
@@ -7,6 +17,9 @@ import (
 	"time"
 )
 
+// Config is every setting the API needs, already parsed and validated.
+// It is built once in main and passed to the constructors that need it
+// (dependency injection), so no package reads os.Getenv on its own.
 type Config struct {
 	Port        int
 	Environment string
@@ -105,6 +118,9 @@ func Load() (Config, error) {
 		)
 	}
 
+	// HS256 signs tokens with this secret. A short secret can be brute
+	// forced offline from any token an attacker sees, letting them mint
+	// tokens for any user. 32 bytes = 256 bits, matching the hash size.
 	if len(jwtSecret) < 32 {
 		return Config{}, fmt.Errorf(
 			"JWT_SECRET must be at least 32 characters",

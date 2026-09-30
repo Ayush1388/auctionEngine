@@ -24,6 +24,11 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/user"
 )
 
+// main is the composition root: the one place that reads configuration,
+// builds every dependency and wires them together (dependency injection by
+// hand, no framework). Packages below never construct their own
+// dependencies, which is what lets tests swap in a test database or a fake
+// clock.
 func main() {
 	logger := slog.New(
 		slog.NewJSONHandler(
