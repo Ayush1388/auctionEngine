@@ -1,8 +1,9 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/Ayush1388/auctionEngine/internal/httpx"
 )
 
 type HealthResponse struct {
@@ -10,19 +11,5 @@ type HealthResponse struct {
 }
 
 func Healthcheck(w http.ResponseWriter, r *http.Request) {
-	response := HealthResponse{
-		Status: "available",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	err := json.NewEncoder(w).Encode(response)
-	if err != nil {
-		http.Error(
-			w,
-			`{"error":"failed to encode response"}`,
-			http.StatusInternalServerError,
-		)
-		return
-	}
+	httpx.WriteJSON(w, http.StatusOK, HealthResponse{Status: "available"})
 }

@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Ayush1388/auctionEngine/internal/database"
 )
 
 type Event struct {
@@ -175,9 +176,11 @@ func (r *Repository) Retry(
 	return nil
 }
 
-func (r *Repository) Create(
+// Enqueue adds an event to the outbox. Pass the transaction that makes the
+// change the event describes, so both are committed or neither is.
+func Enqueue(
 	ctx context.Context,
-	tx pgx.Tx,
+	db database.DBTX,
 	eventType string,
 	payload any,
 ) error {
@@ -189,7 +192,7 @@ func (r *Repository) Create(
 		)
 	}
 
-	_, err = tx.Exec(
+	_, err = db.Exec(
 		ctx,
 		`
 		INSERT INTO outbox_events (
@@ -203,10 +206,10 @@ func (r *Repository) Create(
 		eventType,
 		payloadBytes,
 	)
-
 	if err != nil {
 		return fmt.Errorf(
-			"failed to create outbox event: %w",
+			"failed to enqueue %s event: %w",
+			eventType,
 			err,
 		)
 	}

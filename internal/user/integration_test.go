@@ -18,7 +18,7 @@ func newService(t *testing.T) (*user.Service, func(query string, args ...any) in
 
 	pool := testdb.New(t)
 	jwt := user.NewJWTService("0123456789abcdef0123456789abcdef", "test", time.Hour)
-	service := user.NewService(user.NewRepository(pool), jwt)
+	service := user.NewService(pool, user.NewRepository(pool), jwt)
 
 	count := func(query string, args ...any) int {
 		t.Helper()
@@ -36,7 +36,7 @@ func TestRegisterActivateLogin(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()
 	jwt := user.NewJWTService("0123456789abcdef0123456789abcdef", "test", time.Hour)
-	service := user.NewService(user.NewRepository(pool), jwt)
+	service := user.NewService(pool, user.NewRepository(pool), jwt)
 
 	registered, err := service.Register(ctx, user.RegisterInput{
 		Email:    "alice@example.com",
@@ -134,5 +134,29 @@ func TestLoginUnknownEmail(t *testing.T) {
 	})
 	if !errors.Is(err, user.ErrInvalidCredentials) {
 		t.Fatalf("got %v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestRegisterRollsBackUserWhenOutboxFails(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	service := user.NewService(pool, user.NewRepository(pool), user.NewJWTService("0123456789abcdef0123456789abcdef", "test", time.Hour))
+
+	// Make the outbox insert fail after the user insert has succeeded.
+	if _, err := pool.Exec(ctx, "ALTER TABLE outbox_events RENAME TO outbox_events_gone"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := service.Register(ctx, user.RegisterInput{Email: "carol@example.com", Password: testPassword})
+	if err == nil {
+		t.Fatal("expected Register to fail when the outbox is unavailable")
+	}
+
+	var users int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&users); err != nil {
+		t.Fatal(err)
+	}
+	if users != 0 {
+		t.Fatalf("user row survived a failed registration (users = %d)", users)
 	}
 }
