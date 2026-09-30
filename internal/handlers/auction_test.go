@@ -217,3 +217,31 @@ func TestListAuctionsHTTP(t *testing.T) {
 		t.Fatalf("empty result should be [] not null: %v", body)
 	}
 }
+
+func TestCancelAuctionHTTP(t *testing.T) {
+	a := newAPI(t)
+	_, ownerToken := a.newUser()
+	_, otherToken := a.newUser()
+
+	id := a.createAuction(ownerToken, time.Hour, time.Hour)["id"].(string)
+	path := "/v1/auctions/" + id + "/cancel"
+
+	if w, _ := a.request("POST", path, "", ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", w.Code)
+	}
+	if w, _ := a.request("POST", path, otherToken, ""); w.Code != http.StatusForbidden {
+		t.Fatalf("not the owner: %d", w.Code)
+	}
+	if w, _ := a.request("POST", "/v1/auctions/"+uuid.NewString()+"/cancel", ownerToken, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("unknown auction: %d", w.Code)
+	}
+
+	w, body := a.request("POST", path, ownerToken, "")
+	if w.Code != http.StatusOK || body["status"] != "CANCELLED" {
+		t.Fatalf("owner: %d %v", w.Code, body)
+	}
+
+	if w, _ := a.request("POST", path, ownerToken, ""); w.Code != http.StatusConflict {
+		t.Fatalf("cancel twice: %d", w.Code)
+	}
+}

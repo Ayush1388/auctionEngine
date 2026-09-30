@@ -74,3 +74,16 @@ func (s Status) Transition(next Status) (Status, error) {
 	}
 	return next, nil
 }
+
+// SourcesOf returns every status that may move to target. Repositories use
+// it in WHERE clauses so the database update and the state machine can
+// never disagree.
+func SourcesOf(target Status) []Status {
+	var sources []Status
+	for _, from := range []Status{StatusNotActive, StatusActive, StatusCompleted, StatusCancelled} {
+		if from.CanTransition(target) {
+			sources = append(sources, from)
+		}
+	}
+	return sources
+}
