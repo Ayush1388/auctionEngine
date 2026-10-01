@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
+	"github.com/Ayush1388/auctionEngine/internal/breaker"
 	pb "github.com/Ayush1388/auctionEngine/internal/gen/biddingv1"
 )
 
@@ -48,6 +50,42 @@ const serviceConfig = `{
 type Client struct {
 	conn *grpc.ClientConn
 	rpc  pb.BiddingServiceClient
+
+	// breaker fails fast while the bidding service is down (v1.0); nil
+	// disables it. See WithBreaker.
+	breaker *breaker.Breaker
+}
+
+// WithBreaker guards unary calls with b.
+//
+// Why a breaker on top of gRPC's own retries and deadlines: when the
+// service is down, every bid still waits for the 3 s deadline (times the
+// retries) before the user sees 503. Thousands of gateway goroutines pile
+// up waiting. With the breaker open, the gateway answers 503 at once, and
+// a recovering service isn't flooded by the backlog.
+//
+// Only bidding.ErrUnavailable counts as a failure (UNAVAILABLE, deadline
+// exceeded, internal). "Bid too low" is the service working correctly.
+func (c *Client) WithBreaker(b *breaker.Breaker) *Client {
+	c.breaker = b
+	return c
+}
+
+// BreakerFailure classifies errors for the bidding client's breaker.
+func BreakerFailure(err error) bool { return errors.Is(err, bidding.ErrUnavailable) }
+
+// guard runs fn through the breaker, if any. An open breaker surfaces as
+// bidding.ErrUnavailable, so handlers answer 503 + Retry-After exactly as
+// they do when the service itself is unreachable.
+func (c *Client) guard(ctx context.Context, fn func(context.Context) error) error {
+	if c.breaker == nil {
+		return fn(ctx)
+	}
+	err := c.breaker.Do(ctx, fn)
+	if errors.Is(err, breaker.ErrOpen) {
+		return fmt.Errorf("%w: %w", bidding.ErrUnavailable, err)
+	}
+	return err
 }
 
 // Dial connects to addr ("biddingsvc:50051").
@@ -84,7 +122,15 @@ func NewClientFromConn(conn *grpc.ClientConn) *Client {
 
 func (c *Client) Close() error { return c.conn.Close() }
 
-func (c *Client) PlaceBid(ctx context.Context, in bidding.PlaceBidInput) (bidding.Result, error) {
+func (c *Client) PlaceBid(ctx context.Context, in bidding.PlaceBidInput) (res bidding.Result, err error) {
+	err = c.guard(ctx, func(ctx context.Context) error {
+		res, err = c.placeBid(ctx, in)
+		return err
+	})
+	return res, err
+}
+
+func (c *Client) placeBid(ctx context.Context, in bidding.PlaceBidInput) (bidding.Result, error) {
 	key := in.IdempotencyKey
 	if key == "" {
 		// Make the call safe to retry (see serviceConfig). Scoped to this
@@ -116,7 +162,15 @@ func (c *Client) PlaceBid(ctx context.Context, in bidding.PlaceBidInput) (biddin
 	}, nil
 }
 
-func (c *Client) History(ctx context.Context, auctionID uuid.UUID, limit, cursor string) (bidding.HistoryPage, error) {
+func (c *Client) History(ctx context.Context, auctionID uuid.UUID, limit, cursor string) (page bidding.HistoryPage, err error) {
+	err = c.guard(ctx, func(ctx context.Context) error {
+		page, err = c.history(ctx, auctionID, limit, cursor)
+		return err
+	})
+	return page, err
+}
+
+func (c *Client) history(ctx context.Context, auctionID uuid.UUID, limit, cursor string) (bidding.HistoryPage, error) {
 	resp, err := c.rpc.ListBids(ctx, &pb.ListBidsRequest{AuctionId: auctionID.String(), Limit: limit, Cursor: cursor})
 	if err != nil {
 		return bidding.HistoryPage{}, fromStatus(err)

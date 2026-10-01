@@ -52,6 +52,10 @@ type Deps struct {
 	Logger      *slog.Logger
 	CORSOrigins []string
 	HSTS        bool
+
+	// MaxInFlight sheds load above this many concurrent requests (v1.0).
+	// 0 disables it.
+	MaxInFlight int
 }
 
 // Limits are the rate-limit rules, applied per client IP unless noted.
@@ -193,6 +197,7 @@ func Routes(d Deps) http.Handler {
 	// and before AccessLog so access-log lines carry the trace ID.
 	return middleware.Chain(global,
 		metrics.Middleware,
+		middleware.LimitInFlight(d.MaxInFlight, "/livez", "/readyz", "/v1/healthcheck", "/v1/ws"),
 		middleware.Recover,
 		middleware.RequestID(d.Logger),
 		telemetry.Middleware,

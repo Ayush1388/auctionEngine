@@ -29,7 +29,7 @@ func (h *EventHandler) Handle(
 ) error {
 	switch event.EventType {
 	case EventTypeActivationEmail:
-		return h.handleActivationEmail(event)
+		return h.handleActivationEmail(ctx, event)
 
 	default:
 		return fmt.Errorf(
@@ -40,6 +40,7 @@ func (h *EventHandler) Handle(
 }
 
 func (h *EventHandler) handleActivationEmail(
+	ctx context.Context,
 	event outbox.Event,
 ) error {
 	var payload ActivationEmailEvent
@@ -64,6 +65,7 @@ func (h *EventHandler) handleActivationEmail(
 	}
 
 	if err := h.service.SendActivationEmail(
+		ctx,
 		payload.To,
 		payload.ActivationToken,
 	); err != nil {

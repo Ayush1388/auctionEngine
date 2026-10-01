@@ -99,6 +99,10 @@ type Config struct {
 	// the listener closes (v1.0). Set it a little above the readiness probe
 	// period in Kubernetes; 0 for local runs.
 	DrainDelay time.Duration
+
+	// MaxInFlight is the load-shedding limit: concurrent HTTP requests
+	// above it get an immediate 503 (v1.0). 0 disables it.
+	MaxInFlight int
 }
 
 func Load() (Config, error) {
@@ -277,8 +281,9 @@ func Load() (Config, error) {
 		ElasticsearchURL:   os.Getenv("ELASTICSEARCH_URL"),
 		ElasticsearchIndex: envOr("ELASTICSEARCH_INDEX", "auctions"),
 
-		AdminAddr:  os.Getenv("ADMIN_ADDR"),
-		DrainDelay: drainDelay,
+		AdminAddr:   os.Getenv("ADMIN_ADDR"),
+		DrainDelay:  drainDelay,
+		MaxInFlight: envIntAllowZero("MAX_IN_FLIGHT", 0),
 	}, nil
 }
 

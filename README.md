@@ -170,6 +170,13 @@ A background worker activates and completes auctions on schedule. It claims batc
 - **Probes**: `/livez` (process up) and `/readyz` (critical dependencies reachable, not draining). On SIGTERM the instance **drains** (readiness 503, keep serving for `DRAIN_DELAY`) before closing, so deploys drop no requests
 - **pprof** on the admin port for CPU, heap and goroutine profiles of a live process
 
+### Resilience and performance
+
+- **Circuit breakers** in front of Elasticsearch, the bidding gRPC service and SMTP: after repeated failures, calls fail fast (search falls back to PostgreSQL, bids get an immediate 503) instead of every request waiting for a timeout
+- **Load shedding** (`MAX_IN_FLIGHT`): past capacity, excess requests get an instant 503 + `Retry-After`, which keeps latency normal for the requests that are served
+- **Outbox wake-up via LISTEN/NOTIFY** (about 5 ms after commit instead of a 2-second poll), with back-to-back draining
+- **Measured, not guessed**: a load generator (`cmd/loadgen`), a k6 open-model script with SLO thresholds, and benchmarks. Load testing found a 4-connection DB pool and an outbox capped at 5 events/s; both are fixed and documented in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
+
 ### Operations
 
 - Structured **JSON logging** with `log/slog`
@@ -262,6 +269,7 @@ INTERNAL_TOKEN=change-me-too              # shared secret between gateway and se
 ADMIN_ADDR=:9090                          # optional; /metrics and pprof (keep internal)
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # optional; send traces to Jaeger
 DRAIN_DELAY=5s                            # optional; drain time on SIGTERM (0 locally)
+MAX_IN_FLIGHT=200                         # optional; shed load above this many concurrent requests
 
 # 3. Run migrations, then the API
 go run ./cmd/migrate
@@ -315,6 +323,8 @@ api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
 internal/metrics    Prometheus metrics, RED middleware, pool/backlog collectors
 internal/telemetry  OpenTelemetry setup, HTTP middleware, pgx tracer, propagation
 internal/health     /livez, /readyz and draining
+internal/breaker    circuit breaker (closed / open / half-open)
+cmd/loadgen         load generator; loadtest/k6 has the open-model script
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
 internal/database   pgx pool, DBTX interface, WithTx
@@ -339,6 +349,6 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.7 – Real-time** ✅: WebSocket rooms, heartbeats, backpressure, multi-instance fan-out
 - **v0.8 – Kafka** ✅: outbox relay, bids partitioned by auction, consumer groups, idempotent consumers, DLQ
 - **v0.9 – gRPC** ✅: bidding service, streaming, deadlines, interceptors, error details, safe retries
-- **v1.0 – Production** 🚧: observability (metrics, tracing, probes, pprof) ✅, resilience and load testing, containerised deployment
+- **v1.0 – Production** 🚧: observability (metrics, tracing, probes, pprof) ✅, resilience and load testing ✅, containerised deployment
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
