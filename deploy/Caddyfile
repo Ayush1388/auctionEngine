@@ -1,0 +1,42 @@
+# Caddy: the only public entry point.
+#
+# SITE_ADDRESS is ":80" for local runs, or a domain such as
+# auction.example.com in production. With a domain, Caddy gets a free
+# Let's Encrypt certificate, renews it, and redirects HTTP to HTTPS.
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# Operator endpoints never leave the private network.
+	@internal path /metrics /debug/*
+	respond @internal 404
+
+	reverse_proxy api-1:4000 api-2:4000 {
+		# Send each request to the instance with the fewest open requests.
+		lb_policy least_conn
+
+		# Active health checks: an instance whose /readyz fails (database
+		# down, or draining during a deploy) stops getting traffic within
+		# about 2 seconds.
+		health_uri /readyz
+		health_interval 2s
+		health_timeout 2s
+
+		# Passive: a connection error retries the request on the other
+		# instance for up to 5 s instead of returning 502 to the client.
+		lb_try_duration 5s
+		fail_duration 10s
+
+		# Real client address for rate limiting and logs. The API trusts
+		# this header only from the Docker network (TRUSTED_PROXIES).
+		header_up X-Forwarded-For {remote_host}
+
+		# WebSockets (/v1/ws) are proxied automatically; flush streamed
+		# responses immediately.
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -1,0 +1,88 @@
+# Alert rules: conditions a human should hear about.
+#
+# Each rule alerts on a SYMPTOM users feel (errors, latency, stuck work),
+# not on every internal blip, and only after it has lasted a while ("for"),
+# so a single slow scrape doesn't page anyone. Prometheus evaluates these;
+# to actually send notifications, add an Alertmanager and point it at
+# email, Slack or a pager.
+groups:
+  - name: auction-engine
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.job }} instance {{ $labels.instance }} is down"
+
+      # More than 5% of API requests failing with a server error.
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(auction_http_requests_total{code=~"5.."}[5m]))
+            / sum(rate(auction_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "More than 5% of requests are failing"
+
+      # The slowest 1% of requests take over a second.
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(auction_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "p99 API latency above 1s"
+
+      # Bids are the product: slow bids mean row-lock contention or a slow
+      # database.
+      - alert: SlowBids
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(auction_bid_duration_seconds_bucket[5m]))) > 0.25
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "p95 bid latency above 250ms"
+
+      # Events piling up in the outbox: emails, settlement, search and live
+      # updates are all falling behind.
+      - alert: OutboxBacklog
+        expr: max(auction_outbox_pending) > 1000
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "Outbox backlog above 1000 events"
+
+      - alert: OutboxDeadLetters
+        expr: max(auction_outbox_dead_lettered) > 0
+        for: 1m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Outbox events were dead-lettered; inspect GET /v1/admin/outbox/failed"
+
+      # Async bids waiting in Kafka: workers are down or too few.
+      - alert: KafkaConsumerLag
+        expr: sum(auction_kafka_consumer_lag) > 500
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Bid workers are falling behind (lag {{ $value }})"
+
+      # A dependency is failing fast instead of being called.
+      - alert: CircuitBreakerOpen
+        expr: max by (name) (auction_circuit_breaker_state) == 2
+        for: 2m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} is open"
+
+      # Requests had to wait for a database connection.
+      - alert: DatabasePoolSaturated
+        expr: |
+          max(auction_db_pool_acquired_connections / auction_db_pool_max_connections) > 0.9
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Database connection pool above 90% in use"

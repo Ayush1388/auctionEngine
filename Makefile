@@ -5,7 +5,7 @@ GOBIN     ?= $(shell $(GO) env GOPATH)/bin
 PROTO_DIR := api/proto
 GEN_DIR   := internal/gen
 
-.PHONY: help build test test-race lint proto proto-tools migrate run up down
+.PHONY: help build test test-race lint proto proto-tools migrate run infra infra-down up down e2e rollout logs
 
 help: ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -46,8 +46,23 @@ migrate: ## apply database migrations
 run: ## run the API (reads .env)
 	$(GO) run ./cmd/api
 
-up: ## start the full stack with Docker Compose
-	docker compose up -d --build
+infra: ## start only the dependencies (Postgres, Redis, Elasticsearch, Kafka) for `make run`
+	docker compose up -d
 
-down: ## stop the stack
+infra-down: ## stop the dependencies
 	docker compose down
+
+up: ## deploy the full production stack locally (needs deploy/.env, see deploy/.env.example)
+	docker compose -f deploy/compose.yml up -d --build --wait
+
+down: ## stop the full stack
+	docker compose -f deploy/compose.yml down
+
+logs: ## follow the full stack's logs
+	docker compose -f deploy/compose.yml logs -f --tail 50
+
+e2e: ## end-to-end test against the running full stack
+	$(GO) test -tags e2e -v -count=1 -timeout 15m ./e2e
+
+rollout: ## zero-downtime deploy of a new image (IMAGE=…)
+	./deploy/rollout.sh

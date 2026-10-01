@@ -92,3 +92,101 @@ jobs:
 
       - name: Test
         run: go test -race -count=1 ./...
+
+  # -------------------------------------------------------------------------
+  # Deploy the real stack (deploy/compose.yml: Caddy, two API instances, the
+  # bidding service, bid workers, PostgreSQL, Redis, Elasticsearch, Kafka,
+  # Prometheus, Grafana, Jaeger) and drive it end to end from outside.
+  # -------------------------------------------------------------------------
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Fresh random secrets for this run; nothing secret lives in git.
+      - name: Configure
+        run: |
+          cp deploy/.env.example deploy/.env
+          sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" deploy/.env
+          sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" deploy/.env
+          sed -i "s/^INTERNAL_TOKEN=.*/INTERNAL_TOKEN=$(openssl rand -hex 32)/" deploy/.env
+          sed -i "s/^GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)/" deploy/.env
+
+      - name: Start the stack
+        run: docker compose -f deploy/compose.yml up -d --build --wait --wait-timeout 600
+
+      - name: End-to-end test
+        run: go test -tags e2e -v -count=1 -timeout 15m ./e2e
+
+      # A zero-downtime rollout must keep serving while each instance is
+      # replaced: run it while a probe hammers the API, and fail on any
+      # error response.
+      - name: Rolling deploy without dropped requests
+        run: |
+          failures=0
+          ( while true; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/v1/auctions?limit=1)
+              [ "$code" = "200" ] || { echo "probe got $code"; echo x >> /tmp/failures; }
+              sleep 0.1
+            done ) &
+          probe=$!
+          ./deploy/rollout.sh
+          kill $probe
+          if [ -s /tmp/failures ]; then
+            echo "$(wc -l < /tmp/failures) failed requests during rollout"
+            exit 1
+          fi
+          echo "rollout served every request"
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f deploy/compose.yml logs --no-color --tail 200
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f deploy/compose.yml down -v
+
+  # -------------------------------------------------------------------------
+  # Container image: built for amd64 and arm64 on every pull request, and
+  # published to GitHub Container Registry from main. Deploy by commit SHA
+  # (immutable), not by "latest".
+  # -------------------------------------------------------------------------
+  image:
+    runs-on: ubuntu-latest
+    needs: [test, e2e]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ steps.name.outputs.image }}:${{ github.sha }}
+            ${{ steps.name.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
