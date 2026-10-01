@@ -117,8 +117,21 @@ func (w *LifecycleWorker) activate(ctx context.Context, now time.Time) (int, err
 
 	err := database.WithTx(ctx, w.db, func(tx pgx.Tx) error {
 		ids, err := claimAndMove(ctx, tx, StatusActive, "starts_at", now, w.batchSize)
+		if err != nil {
+			return err
+		}
 		n = len(ids)
-		return err
+
+		for _, moved := range ids {
+			if err := outbox.Enqueue(ctx, tx, EventTypeActivated, StatusChangedEvent{
+				AuctionID: moved.ID,
+				Status:    StatusActive,
+				ChangedAt: now.UTC(),
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 
 	return n, err

@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
+	"github.com/Ayush1388/auctionEngine/internal/auctioncache"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
 	"github.com/Ayush1388/auctionEngine/internal/config"
@@ -22,8 +24,10 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
+	"github.com/Ayush1388/auctionEngine/internal/redisx"
 	"github.com/Ayush1388/auctionEngine/internal/server"
 	"github.com/Ayush1388/auctionEngine/internal/session"
+	"github.com/Ayush1388/auctionEngine/internal/trending"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
@@ -90,6 +94,37 @@ func main() {
 	logger.Info("connected to PostgreSQL")
 
 	// --------------------------------------------------
+	// Redis (optional)
+	// --------------------------------------------------
+
+	// Redis only holds things that are cheap to lose (cache, trending,
+	// rate-limit buckets). If it's configured but down at start-up, keep
+	// going: go-redis reconnects on its own, and every Redis feature
+	// degrades gracefully in the meantime.
+	var rdb *redis.Client
+	if cfg.RedisURL != "" {
+		rdb, err = redisx.NewClient(context.Background(), cfg.RedisURL)
+		if err != nil {
+			logger.Warn("redis unavailable at start-up, continuing degraded", "error", err)
+			opts, perr := redis.ParseURL(cfg.RedisURL)
+			if perr != nil {
+				logger.Error("invalid REDIS_URL", "error", perr)
+				os.Exit(1)
+			}
+			rdb = redis.NewClient(opts)
+		} else {
+			logger.Info("connected to Redis")
+		}
+		defer rdb.Close()
+	}
+
+	// Auctions are needed early: the cache and trending wrap their reads.
+	auctionService := auction.NewService(
+		db,
+		auction.NewRepository(db),
+	)
+
+	// --------------------------------------------------
 	// Email
 	// --------------------------------------------------
 
@@ -140,15 +175,40 @@ func main() {
 		biddingService.SettlementHandler(),
 	)
 
-	// bid.placed and auction.settled have no consumer yet (WebSockets and
-	// Kafka arrive later). Acknowledge them so they aren't retried.
-	for _, eventType := range []string{bidding.EventTypePlaced, bidding.EventTypeSettled} {
+	// Every auction-changing event must have at least one handler, or the
+	// router rejects it and it's retried until dead-lettered. These no-ops
+	// guarantee that even when optional consumers (Redis) are off.
+	auctionEvents := []string{
+		bidding.EventTypePlaced,
+		bidding.EventTypeSettled,
+		auction.EventTypeActivated,
+		auction.EventTypeCancelled,
+		auction.EventTypeCompleted,
+	}
+	for _, eventType := range auctionEvents {
 		outboxRouter.Register(
 			eventType,
 			outbox.HandlerFunc(func(ctx context.Context, event outbox.Event) error {
 				return nil
 			}),
 		)
+	}
+
+	// Trending falls back to PostgreSQL when Redis is off or down.
+	var ranker trending.Ranker = trending.NewPostgres(db)
+	var auctionCache *auctioncache.Cache
+
+	if rdb != nil {
+		auctionCache = auctioncache.New(rdb, cfg.RedisPrefix, auctionService.Get)
+
+		// Any change to an auction drops its cache entry.
+		for _, eventType := range auctionEvents {
+			outboxRouter.Register(eventType, auctionCache.InvalidationHandler())
+		}
+
+		redisRanker := trending.NewRedis(rdb, cfg.RedisPrefix, trending.NewPostgres(db))
+		outboxRouter.Register(bidding.EventTypePlaced, redisRanker.Handler())
+		ranker = redisRanker
 	}
 
 	outboxWorker := outbox.NewWorker(
@@ -198,7 +258,12 @@ func main() {
 	memoryLimiter := ratelimit.NewMemory()
 
 	var limiter ratelimit.Limiter
-	if cfg.RateLimitsEnabled {
+	switch {
+	case !cfg.RateLimitsEnabled:
+	case rdb != nil:
+		// Shared by every API instance.
+		limiter = ratelimit.NewRedis(rdb, cfg.RedisPrefix)
+	default:
 		limiter = memoryLimiter
 	}
 
@@ -218,14 +283,13 @@ func main() {
 	// Auctions
 	// --------------------------------------------------
 
-	auctionService := auction.NewService(
-		db,
-		auction.NewRepository(db),
-	)
-
 	auctionHandler := handlers.NewAuctionHandler(
 		auctionService,
-	)
+	).WithTrending(ranker)
+
+	if auctionCache != nil {
+		auctionHandler.WithCache(auctionCache.Get)
+	}
 
 	// --------------------------------------------------
 	// HTTP server

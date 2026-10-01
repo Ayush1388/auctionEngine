@@ -54,6 +54,16 @@ Tests prove it under load: 40 users bidding at once on one auction, one user try
 
 Money never changes in place. Every movement is a journal whose lines sum to zero, and the ledger tables are append-only (enforced by triggers). `wallet.Reconcile` recomputes all balances from the ledger. Settlement is idempotent, so a redelivered `auction.completed` event can't pay the seller twice. See [`docs/decisions/0007`](docs/decisions/0007-double-entry-ledger.md).
 
+### Redis: cache, trending, shared rate limits
+
+Redis only holds data that is cheap to lose ([`0009`](docs/decisions/0009-redis-as-a-disposable-accelerator.md)):
+
+- **Cache-aside** auction reads with a 30 s TTL, invalidated by outbox events, and **singleflight** so 100 simultaneous cache misses cost one database query (tested).
+- **Trending** from hourly sorted-set buckets, fed idempotently by a Lua script so redelivered events never double-count.
+- **Token buckets as an atomic Lua script**, so every API instance shares one limit per client (60 concurrent requests across 3 instances with a burst of 10 let exactly 10 through).
+
+If Redis goes down, the cache reads PostgreSQL, trending is computed from PostgreSQL, and rate limits fail open.
+
 ### Auction lifecycle as a state machine
 
 ```
@@ -141,7 +151,8 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `GET` | `/v1/users/me` | JWT | Current user |
 | `POST` | `/v1/auctions` | JWT | List an item for auction |
 | `GET` | `/v1/auctions` | optional | List auctions, newest first: `?status=ACTIVE&owner=me&limit=20&cursor=…` |
-| `GET` | `/v1/auctions/{id}` | | Get one auction with its item |
+| `GET` | `/v1/auctions/trending` | | Active auctions with the most bids in the last hour |
+| `GET` | `/v1/auctions/{id}` | | Get one auction with its item (cached in Redis) |
 | `POST` | `/v1/auctions/{id}/cancel` | JWT (owner) | Cancel an auction before it starts |
 | `POST` | `/v1/auctions/{id}/bids` | JWT | Place a bid (send an `Idempotency-Key` header) |
 | `GET` | `/v1/auctions/{id}/bids` | | Bid history, newest first |
@@ -164,7 +175,7 @@ Prices are integers in the smallest currency unit (paise/cents).
 ## Running locally
 
 ```bash
-# 1. Start Postgres
+# 1. Start Postgres (and Redis, optional)
 docker compose up -d
 
 # 2. Configure (create a .env file in the project root)
@@ -180,6 +191,7 @@ SMTP_USERNAME=...
 SMTP_PASSWORD=...
 SMTP_FROM=no-reply@auction.local
 APP_BASE_URL=http://localhost:4000
+REDIS_URL=redis://localhost:6379/0   # optional
 
 # 3. Run migrations, then the API
 go run ./cmd/migrate
@@ -217,6 +229,9 @@ internal/session    refresh tokens: issue, rotate, reuse detection, logout
 internal/ratelimit  token-bucket limiter, middleware, trusted-proxy client IP
 internal/middleware request IDs, access log, recover, security headers, CORS
 internal/logctx     request-scoped logger in the context
+internal/redisx     Redis client and conventions
+internal/auctioncache  cache-aside auction reads, singleflight, event invalidation
+internal/trending   hourly sorted-set ranking with Postgres fallback
 api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
@@ -237,6 +252,7 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.2 – [Auction management](https://github.com/Ayush1388/auctionEngine/milestone/1)** ✅: create, view, list and cancel auctions; lifecycle worker
 - **v0.3 – Bidding** ✅: wallet reservations, concurrent bids, double-entry ledger, settlement, idempotency, anti-sniping
 - **v0.4 – Security** ✅: rate limiting, refresh tokens, RBAC, CORS, request IDs, OpenAPI
-- **Later**: Redis, search, WebSockets, Kafka, gRPC, production hardening
+- **v0.5 – Redis** ✅: cache-aside, stampede protection, trending, shared rate limits
+- **Later**: search, WebSockets, Kafka, gRPC, production hardening
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
