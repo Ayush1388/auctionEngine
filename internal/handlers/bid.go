@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -17,8 +18,20 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
 
+// Bidder is everything the bid handlers need from the bidding domain.
+//
+// bidding.Service satisfies it in-process (the monolith), and
+// grpcsvc.Client satisfies it over the network (v0.9, bidding as a separate
+// service). The handlers depend on this interface, not on either concrete
+// type: the Dependency Inversion Principle. That is why extracting bidding
+// into its own process changed no handler code and no HTTP test.
+type Bidder interface {
+	PlaceBid(ctx context.Context, in bidding.PlaceBidInput) (bidding.Result, error)
+	History(ctx context.Context, auctionID uuid.UUID, limit, cursor string) (bidding.HistoryPage, error)
+}
+
 type BidHandler struct {
-	service *bidding.Service
+	service Bidder
 
 	// queue enables asynchronous bids through Kafka (v0.8). nil means every
 	// bid is placed synchronously, even if the client asks for async.
@@ -31,7 +44,7 @@ func (h *BidHandler) WithQueue(q *bidqueue.Requests) *BidHandler {
 	return h
 }
 
-func NewBidHandler(service *bidding.Service) *BidHandler {
+func NewBidHandler(service Bidder) *BidHandler {
 	return &BidHandler{service: service}
 }
 
@@ -146,7 +159,7 @@ func (h *BidHandler) Place(w http.ResponseWriter, r *http.Request) {
 		errors.Is(err, bidding.ErrInvalidAmount),
 		errors.Is(err, bidding.ErrInvalidKey):
 		httpx.Error(w, http.StatusUnprocessableEntity, err.Error())
-	case errors.Is(err, bidding.ErrContention):
+	case errors.Is(err, bidding.ErrContention), errors.Is(err, bidding.ErrUnavailable):
 		w.Header().Set("Retry-After", "1")
 		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
 	default:
