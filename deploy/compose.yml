@@ -1,0 +1,386 @@
+# The whole system on one machine: the production deployment.
+#
+#   cp deploy/.env.example deploy/.env      # then fill in the secrets
+#   docker compose -f deploy/compose.yml up -d --build --wait
+#
+# What runs (see docs/DEPLOYMENT.md for the picture):
+#
+#   caddy            public entry point: TLS, load balancing, health checks
+#   api-1, api-2     two API instances (HTTP, WebSockets, outbox + lifecycle workers)
+#   biddingsvc       the bidding service, called by the API over gRPC
+#   bidworker        Kafka consumers that place asynchronous bids
+#   migrate          applies schema migrations, then exits
+#   postgres         the source of truth
+#   redis            cache, trending, shared rate limits, WebSocket fan-out
+#   elasticsearch    search read model
+#   kafka            bid commands and the auction event stream (KRaft, no ZooKeeper)
+#   mailpit          SMTP server with a web inbox (replace with a real SMTP provider)
+#   prometheus       scrapes metrics, evaluates alert rules
+#   grafana          dashboards
+#   jaeger           distributed traces
+#   backup           nightly pg_dump with rotation
+#
+# Only Caddy is reachable from the internet. Every other port is either
+# internal to the Docker network or bound to 127.0.0.1 (reach it over an SSH
+# tunnel), because metrics, traces and the mail inbox must never be public.
+
+name: auctionengine
+
+# ---------------------------------------------------------------------------
+# Shared settings for every container built from this repository.
+# ---------------------------------------------------------------------------
+x-app: &app
+  image: ${IMAGE:-auctionengine:local}
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  networks: [backend]
+  # SIGTERM first; SIGKILL only if the process hasn't exited 30 s later.
+  # The services drain inside that window (readiness 503 -> DRAIN_DELAY ->
+  # close listeners -> finish workers).
+  stop_grace_period: 30s
+  # Without rotation, container logs grow until the disk is full.
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+# Settings every Go service reads (internal/config).
+x-app-env: &app-env
+  ENVIRONMENT: production
+  DATABASE_URL: postgres://auction:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@postgres:5432/auction?sslmode=disable
+  REDIS_URL: redis://redis:6379/0
+  KAFKA_BROKERS: kafka:9092
+  ELASTICSEARCH_URL: http://elasticsearch:9200
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set INTERNAL_TOKEN in deploy/.env}
+  # Traces go to Jaeger over OTLP/HTTP. Lower the ratio under real traffic.
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+  OTEL_TRACES_SAMPLER_ARG: ${TRACE_SAMPLE_RATIO:-1.0}
+
+x-api: &api
+  <<: *app
+  command: ["/app/api"]
+  environment:
+    <<: *app-env
+    PORT: "4000"
+    ADMIN_ADDR: ":9090"
+    APP_BASE_URL: ${PUBLIC_URL:-http://localhost}
+    JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
+    JWT_ISSUER: auction-engine
+    ACCESS_TOKEN_TTL: 15m
+    SMTP_HOST: ${SMTP_HOST:-mailpit}
+    SMTP_PORT: ${SMTP_PORT:-1025}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-no-reply@auction.local}
+    CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+    # Bids go to the bidding service; async bids are consumed by the
+    # bidworker container, so the API runs no bid workers itself.
+    BIDDING_GRPC_ADDR: biddingsvc:50051
+    BID_WORKERS: "0"
+    # Only Caddy (on this private network) may set X-Forwarded-For.
+    TRUSTED_PROXIES: 172.28.0.0/16
+    # Keep serving for 5 s after SIGTERM while Caddy's health check notices
+    # /readyz is 503, so a deploy drops no requests.
+    DRAIN_DELAY: 5s
+    # Load shedding: beyond this many concurrent requests, answer 503 fast.
+    MAX_IN_FLIGHT: "1000"
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://localhost:4000/readyz"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+    start_period: 10s
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+    elasticsearch:
+      condition: service_healthy
+    mailpit:
+      condition: service_started
+
+services:
+  # -------------------------------------------------------------------------
+  # Edge
+  # -------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    networks: [backend]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # A domain name here (e.g. auction.example.com) makes Caddy obtain and
+      # renew a Let's Encrypt certificate automatically. ":80" serves plain
+      # HTTP, for local runs and CI.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api-1:
+        condition: service_started
+      api-2:
+        condition: service_started
+    logging: *logging
+
+  # -------------------------------------------------------------------------
+  # Application
+  # -------------------------------------------------------------------------
+  # Runs to completion before anything else starts. Migrations must be
+  # backward compatible (expand, deploy, contract), because during a
+  # rolling deploy old and new code run against the same schema.
+  migrate:
+    <<: *app
+    command: ["/app/migrate", "-dir", "/app/migrations"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgres://auction:${POSTGRES_PASSWORD}@postgres:5432/auction?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Two identical API instances. Explicit services (instead of `replicas`)
+  # so Caddy can health-check each one and deploys can replace them one at
+  # a time (deploy/rollout.sh).
+  api-1:
+    <<: *api
+    hostname: api-1
+
+  api-2:
+    <<: *api
+    hostname: api-2
+
+  biddingsvc:
+    <<: *app
+    command: ["/app/biddingsvc"]
+    environment:
+      <<: *app-env
+      GRPC_PORT: "50051"
+      ADMIN_ADDR: ":9091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9091/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  bidworker:
+    <<: *app
+    command: ["/app/bidworker"]
+    environment:
+      <<: *app-env
+      # Workers in one consumer group split the topic's partitions; more
+      # workers than partitions would sit idle.
+      BID_WORKERS: "4"
+      ADMIN_ADDR: ":9092"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9092/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # Data
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      POSTGRES_USER: auction
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: auction
+    # Room for 2 API instances + bidding service + workers, each with its
+    # own pool, plus admin connections.
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auction -d auction"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  # Redis holds nothing that can't be rebuilt (docs/decisions/0009), so no
+  # persistence: when memory is full, the least recently used keys go.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [backend]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      discovery.type: single-node
+      # Only reachable inside the Docker network. Turn security on if it
+      # ever has to be reachable from anywhere else.
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    logging: *logging
+
+  # Single broker in KRaft mode: Kafka manages its own metadata, no
+  # ZooKeeper. It advertises "kafka:9092", the name other containers use.
+  kafka:
+    image: apache/kafka:3.8.0
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      # One broker can only hold one copy of each partition.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      # Keep the log on the named volume so queued bids survive a restart.
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    logging: *logging
+
+  # A local SMTP server with a web inbox at http://127.0.0.1:8025. In a
+  # real deployment set SMTP_HOST/SMTP_PORT/SMTP_USERNAME/SMTP_PASSWORD to
+  # an email provider and remove this service.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    networks: [backend]
+    ports:
+      - "127.0.0.1:8025:8025"
+    logging: *logging
+
+  # -------------------------------------------------------------------------
+  # Observability
+  # -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    networks: [backend]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in deploy/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus, jaeger]
+    logging: *logging
+
+  # Keeps traces in memory: fine for one machine, lost on restart. For long
+  # retention point it at Elasticsearch or another storage backend.
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      MEMORY_MAX_TRACES: "50000"
+    ports:
+      - "127.0.0.1:16686:16686"
+    logging: *logging
+
+  # -------------------------------------------------------------------------
+  # Backups
+  # -------------------------------------------------------------------------
+  # A logical backup (pg_dump, custom format) every BACKUP_INTERVAL_SECONDS,
+  # kept for BACKUP_KEEP_DAYS, written to deploy/backups on the host. Copy
+  # that folder off the machine: a backup on the same disk is not a backup.
+  backup:
+    image: postgres:18
+    restart: unless-stopped
+    networks: [backend]
+    entrypoint: ["/bin/sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: auction
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: auction
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+    volumes:
+      - ./backup.sh:/scripts/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres_data:
+  es_data:
+  kafka_data:
+  prometheus_data:
+  grafana_data:
+  caddy_data:
+  caddy_config:
