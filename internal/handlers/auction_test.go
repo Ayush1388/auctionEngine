@@ -16,6 +16,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
+	"github.com/Ayush1388/auctionEngine/internal/bidqueue"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/search"
@@ -55,7 +56,7 @@ func newAPI(t *testing.T) *api {
 		Users:    handlers.NewUserHandler(user.NewService(pool, user.NewRepository(pool), jwt), sessions, nil),
 		Sessions: handlers.NewSessionHandler(sessions),
 		Auctions: handlers.NewAuctionHandler(auctionService).WithTrending(trending.NewPostgres(pool)),
-		Bids:     handlers.NewBidHandler(biddingService),
+		Bids:     handlers.NewBidHandler(biddingService).WithQueue(bidqueue.NewRequests(pool)),
 		Wallets:  handlers.NewWalletHandler(wallet.NewService(pool)),
 		Admin:    handlers.NewAdminHandler(wallet.NewService(pool), outbox.NewRepository(pool)),
 		Search:   handlers.NewSearchHandler(search.NewService(nil, search.NewPostgres(pool), slog.New(slog.NewTextHandler(io.Discard, nil))), auctionService),
