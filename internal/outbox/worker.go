@@ -68,6 +68,12 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
+// ProcessOnce claims and handles one batch right now, without waiting for
+// the ticker. Tests use it to drive the pipeline deterministically.
+func (w *Worker) ProcessOnce(ctx context.Context) error {
+	return w.process(ctx)
+}
+
 func (w *Worker) process(ctx context.Context) error {
 	events, err := w.repository.Claim(
 		ctx,

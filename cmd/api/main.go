@@ -24,6 +24,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
+	"github.com/Ayush1388/auctionEngine/internal/realtime"
 	"github.com/Ayush1388/auctionEngine/internal/redisx"
 	"github.com/Ayush1388/auctionEngine/internal/search"
 	"github.com/Ayush1388/auctionEngine/internal/server"
@@ -197,6 +198,24 @@ func main() {
 	}
 
 	// --------------------------------------------------
+	// Live updates over WebSocket (v0.7)
+	// --------------------------------------------------
+
+	hub := realtime.NewHub(cfg.WSMaxConnections)
+
+	// With Redis, updates fan out to every instance's hub; without it,
+	// there is only one instance and the local hub is enough.
+	var publisher realtime.Publisher = realtime.NewLocalPublisher(hub)
+	var fanout *realtime.RedisFanout
+	if rdb != nil {
+		fanout = realtime.NewRedisFanout(rdb, cfg.RedisPrefix, hub, logger)
+		publisher = fanout
+	}
+	for _, eventType := range auctionEvents {
+		outboxRouter.Register(eventType, realtime.EventHandler(auctionService.Get, publisher))
+	}
+
+	// --------------------------------------------------
 	// Search (v0.6)
 	// --------------------------------------------------
 
@@ -343,7 +362,10 @@ func main() {
 
 			Logger:      logger,
 			CORSOrigins: cfg.CORSAllowedOrigins,
-			HSTS:        cfg.Environment == "production",
+			Realtime: realtime.NewHandler(hub, realtime.Options{
+				OriginPatterns: realtime.OriginPatterns(cfg.CORSAllowedOrigins),
+			}, logger),
+			HSTS: cfg.Environment == "production",
 		}),
 	)
 
@@ -375,6 +397,16 @@ func main() {
 	workers.Go(func() {
 		lifecycleWorker.Run(workersCtx)
 	})
+
+	if fanout != nil {
+		workers.Go(func() {
+			fanout.Run(workersCtx)
+		})
+	}
+
+	// http.Server.Shutdown ignores hijacked (WebSocket) connections, so
+	// close them ourselves; clients reconnect to another instance.
+	srv.RegisterOnShutdown(hub.Close)
 
 	// --------------------------------------------------
 	// Start HTTP server

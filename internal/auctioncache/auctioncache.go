@@ -102,12 +102,24 @@ func (c *Cache) Get(ctx context.Context, id uuid.UUID) (auction.Auction, error) 
 
 	// All concurrent misses for this id share one load.
 	v, err, _ := c.group.Do(id.String(), func() (any, error) {
-		c.loads.Add(1)
 		// Detach from the first caller's context: if that client gives up,
 		// the others waiting on this load shouldn't fail with it.
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 
+		// Double-check. A request can miss the cache, then reach Do just
+		// after another flight for the same key finished and filled the
+		// cache. singleflight only merges calls that overlap in time, so
+		// without this second look that late request would start a fresh
+		// database load. (Found by the stampede test under -race load.)
+		if raw, err := c.rdb.Get(loadCtx, c.key(id)).Bytes(); err == nil {
+			var a auction.Auction
+			if json.Unmarshal(raw, &a) == nil {
+				return a, nil
+			}
+		}
+
+		c.loads.Add(1)
 		a, err := c.load(loadCtx, id)
 		if err != nil {
 			return auction.Auction{}, err

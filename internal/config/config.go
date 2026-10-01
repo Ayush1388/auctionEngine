@@ -57,6 +57,11 @@ type Config struct {
 	// RateLimitsEnabled can be switched off for load testing.
 	RateLimitsEnabled bool
 
+	// WSMaxConnections caps WebSocket connections per instance (v0.7).
+	// Past it, new connections are refused with "try again later" rather
+	// than degrading everyone already connected.
+	WSMaxConnections int
+
 	// RedisURL enables the cache, shared rate limits and trending. Empty
 	// means run without Redis (in-memory limits, no cache, trending from
 	// PostgreSQL). RedisPrefix namespaces every key.
@@ -225,6 +230,7 @@ func Load() (Config, error) {
 
 		RefreshTokenTTL:    refreshTTL,
 		CORSAllowedOrigins: splitList(os.Getenv("CORS_ALLOWED_ORIGINS")),
+		WSMaxConnections:   envInt("WS_MAX_CONNECTIONS", 10000),
 		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
 		RateLimitsEnabled:  rateLimits,
 
@@ -234,6 +240,13 @@ func Load() (Config, error) {
 		ElasticsearchURL:   os.Getenv("ELASTICSEARCH_URL"),
 		ElasticsearchIndex: envOr("ELASTICSEARCH_INDEX", "auctions"),
 	}, nil
+}
+
+func envInt(key string, fallback int) int {
+	if n, err := strconv.Atoi(os.Getenv(key)); err == nil && n > 0 {
+		return n
+	}
+	return fallback
 }
 
 func envOr(key, fallback string) string {
