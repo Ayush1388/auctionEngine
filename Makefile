@@ -46,7 +46,7 @@ migrate: ## apply database migrations
 run: ## run the API (reads .env)
 	$(GO) run ./cmd/api
 
-infra: ## start only the dependencies (Postgres, Redis, Elasticsearch, Kafka) for `make run`
+infra: ## start only the dependencies (Postgres, Redis, Elasticsearch, Kafka, Mailpit) for `make run`
 	docker compose up -d
 
 infra-down: ## stop the dependencies
