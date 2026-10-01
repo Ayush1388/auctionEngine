@@ -187,6 +187,20 @@ func (r *Repository) MarkProcessed(
 	return nil
 }
 
+// MarkProcessedMany records several handled events in one statement. Use
+// MarkProcessed for events whose payload needs redacting.
+func (r *Repository) MarkProcessedMany(ctx context.Context, ids []uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE outbox_events
+		SET processed_at = now(), locked_at = NULL, last_error = NULL
+		WHERE id = ANY($1)
+	`, ids)
+	if err != nil {
+		return fmt.Errorf("failed to mark outbox events processed: %w", err)
+	}
+	return nil
+}
+
 // Release unlocks a claimed event that was never attempted, and undoes the
 // attempt counted when it was claimed.
 func (r *Repository) Release(

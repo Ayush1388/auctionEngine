@@ -19,5 +19,6 @@ They are written once and rarely edited. If a decision changes, add a new note t
 | [0012](0012-kafka-bid-pipeline.md) | Asynchronous bids through Kafka, partitioned by auction | Accepted |
 | [0013](0013-bidding-service-over-grpc.md) | Extract bidding into a gRPC service behind the gateway | Accepted |
 | [0014](0014-observability.md) | Observability: Prometheus metrics, OpenTelemetry traces, health probes | Accepted |
+| [0015](0015-resilience.md) | Resilience: circuit breakers, load shedding, bounded SMTP, outbox draining | Accepted |
 
 To add one, copy [`template.md`](template.md) and take the next number.
