@@ -62,6 +62,12 @@ type Config struct {
 	// PostgreSQL). RedisPrefix namespaces every key.
 	RedisURL    string
 	RedisPrefix string
+
+	// ElasticsearchURL enables Elasticsearch for search (v0.6). Empty means
+	// search uses PostgreSQL full-text search. ElasticsearchIndex is the
+	// alias that reads and writes go through.
+	ElasticsearchURL   string
+	ElasticsearchIndex string
 }
 
 func Load() (Config, error) {
@@ -224,6 +230,9 @@ func Load() (Config, error) {
 
 		RedisURL:    os.Getenv("REDIS_URL"),
 		RedisPrefix: envOr("REDIS_PREFIX", "ae:"),
+
+		ElasticsearchURL:   os.Getenv("ELASTICSEARCH_URL"),
+		ElasticsearchIndex: envOr("ELASTICSEARCH_INDEX", "auctions"),
 	}, nil
 }
 

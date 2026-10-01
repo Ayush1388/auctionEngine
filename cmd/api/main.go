@@ -25,6 +25,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
 	"github.com/Ayush1388/auctionEngine/internal/redisx"
+	"github.com/Ayush1388/auctionEngine/internal/search"
 	"github.com/Ayush1388/auctionEngine/internal/server"
 	"github.com/Ayush1388/auctionEngine/internal/session"
 	"github.com/Ayush1388/auctionEngine/internal/trending"
@@ -179,6 +180,7 @@ func main() {
 	// router rejects it and it's retried until dead-lettered. These no-ops
 	// guarantee that even when optional consumers (Redis) are off.
 	auctionEvents := []string{
+		auction.EventTypeCreated,
 		bidding.EventTypePlaced,
 		bidding.EventTypeSettled,
 		auction.EventTypeActivated,
@@ -193,6 +195,34 @@ func main() {
 			}),
 		)
 	}
+
+	// --------------------------------------------------
+	// Search (v0.6)
+	// --------------------------------------------------
+
+	// PostgreSQL full-text search always works; Elasticsearch is used when
+	// configured and falls back to PostgreSQL on any error.
+	var primarySearch search.Backend
+	if cfg.ElasticsearchURL != "" {
+		elastic := search.NewElastic(cfg.ElasticsearchURL, cfg.ElasticsearchIndex)
+
+		ensureCtx, cancelEnsure := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := elastic.EnsureIndex(ensureCtx); err != nil {
+			// Not fatal: search falls back, and indexing events are
+			// retried by the outbox until Elasticsearch is back.
+			logger.Warn("elasticsearch unavailable at start-up, search will fall back to PostgreSQL", "error", err)
+		} else {
+			logger.Info("elasticsearch index ready", "alias", cfg.ElasticsearchIndex)
+		}
+		cancelEnsure()
+
+		indexer := search.NewIndexer(elastic, auctionService.Get, logger)
+		for _, eventType := range auctionEvents {
+			outboxRouter.Register(eventType, indexer.Handler())
+		}
+		primarySearch = elastic
+	}
+	searchService := search.NewService(primarySearch, search.NewPostgres(db), logger)
 
 	// Trending falls back to PostgreSQL when Redis is off or down.
 	var ranker trending.Ranker = trending.NewPostgres(db)
@@ -299,6 +329,7 @@ func main() {
 		cfg.Port,
 		server.Routes(server.Deps{
 			Users:    userHandler,
+			Search:   handlers.NewSearchHandler(searchService, auctionService),
 			Sessions: handlers.NewSessionHandler(sessionService),
 			Auctions: auctionHandler,
 			Bids:     handlers.NewBidHandler(biddingService),

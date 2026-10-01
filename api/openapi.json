@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "auctionEngine API",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Live auction and bidding backend. Amounts are integers in the smallest currency unit. Errors are {\"error\": \"...\"}; validation errors add a fields map. Most endpoints are rate limited (429 with Retry-After)."
   },
   "servers": [
@@ -1642,6 +1642,184 @@
           },
           "400": {
             "description": "Invalid limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auctions/search": {
+      "get": {
+        "tags": [
+          "auctions"
+        ],
+        "summary": "Full-text search over auctions",
+        "description": "Elasticsearch when configured (typo-tolerant, relevance-ranked), otherwise PostgreSQL full-text search. Results are loaded from PostgreSQL so prices and statuses are exact.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Words to search for. Supports \"quoted phrases\" and -exclusions."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NOT_ACTIVE",
+                "ACTIVE",
+                "COMPLETED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque; next_cursor from the previous page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Most relevant first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "auctions": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Auction"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "highlight": {
+                                "type": "string",
+                                "description": "Snippet with matches in <em>\u2026</em>"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "backend": {
+                      "type": "string",
+                      "enum": [
+                        "elasticsearch",
+                        "postgres"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auctions/suggest": {
+      "get": {
+        "tags": [
+          "auctions"
+        ],
+        "summary": "Type-ahead suggestions for active auctions",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 50
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "suggestions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
             "content": {
               "application/json": {
                 "schema": {

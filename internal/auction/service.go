@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/validation"
 )
 
@@ -103,7 +104,18 @@ func (s *Service) Create(
 			return err
 		}
 
-		return repo.Create(ctx, &a)
+		if err := repo.Create(ctx, &a); err != nil {
+			return err
+		}
+
+		// Tell the rest of the system (search indexing, v0.6) in the same
+		// transaction, so a new auction can never be missing from search
+		// because an event was lost.
+		return outbox.Enqueue(ctx, tx, EventTypeCreated, StatusChangedEvent{
+			AuctionID: a.ID,
+			Status:    a.Status,
+			ChangedAt: a.CreatedAt,
+		})
 	})
 	if err != nil {
 		return Auction{}, err
@@ -152,4 +164,12 @@ func (s *Service) Get(
 	id uuid.UUID,
 ) (Auction, error) {
 	return s.repository.GetByID(ctx, id)
+}
+
+// GetMany loads auctions by ID in one query, preserving the given order.
+func (s *Service) GetMany(
+	ctx context.Context,
+	ids []uuid.UUID,
+) ([]Auction, error) {
+	return s.repository.GetMany(ctx, ids)
 }

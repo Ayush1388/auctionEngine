@@ -192,3 +192,45 @@ func (r *Repository) GetByID(
 
 	return a, nil
 }
+
+// GetMany loads several auctions in ONE query and returns them in the order
+// of ids, skipping any that don't exist.
+//
+// Search and trending return a list of IDs. Loading them one by one would
+// be the classic N+1 problem: 1 query for the IDs, then N more, one per
+// result. With 20 results that's 21 round trips instead of 2.
+func (r *Repository) GetMany(
+	ctx context.Context,
+	ids []uuid.UUID,
+) ([]Auction, error) {
+	if len(ids) == 0 {
+		return []Auction{}, nil
+	}
+
+	rows, err := r.db.Query(ctx, selectAuction+` WHERE a.id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load auctions: %w", err)
+	}
+
+	found, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Auction, error) {
+		return scanAuction(row)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to load auctions: %w", err)
+	}
+
+	// ANY($1) returns rows in whatever order is cheapest; restore the
+	// caller's order (relevance or trend rank).
+	byID := make(map[uuid.UUID]Auction, len(found))
+	for _, a := range found {
+		byID[a.ID] = a
+	}
+
+	out := make([]Auction, 0, len(ids))
+	for _, id := range ids {
+		if a, ok := byID[id]; ok {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
