@@ -5,6 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 )
 
 // Handler processes one event. Returning an error schedules a retry.
@@ -110,7 +116,20 @@ func (w *Worker) processOne(
 	finishCtx context.Context,
 	event Event,
 ) {
+	// Continue the trace of the request that enqueued the event. The span
+	// covers every handler the router fans the event out to (cache, search,
+	// WebSocket, Kafka relay), so a slow consumer shows up in that trace.
+	ctx = telemetry.Extract(ctx, event.TraceContext)
+	ctx, span := telemetry.Tracer().Start(ctx, "outbox "+event.EventType,
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("outbox.event_id", event.ID.String()),
+			attribute.Int("outbox.attempt", event.Attempts),
+		))
+	defer span.End()
+
 	if err := w.processEvent(ctx, event); err != nil {
+		telemetry.RecordError(span, err)
 		w.logger.Error(
 			"failed to process outbox event",
 			"event_id", event.ID,
@@ -131,6 +150,11 @@ func (w *Worker) processOne(
 				"error", retryErr,
 			)
 		}
+		result := "retried"
+		if deadLettered {
+			result = "dead_lettered"
+		}
+		metrics.OutboxEvents.WithLabelValues(event.EventType, result).Inc()
 		if deadLettered {
 			w.logger.Error(
 				"outbox event gave up after max attempts",
@@ -162,6 +186,7 @@ func (w *Worker) processOne(
 		return
 	}
 
+	metrics.OutboxEvents.WithLabelValues(event.EventType, "processed").Inc()
 	w.logger.Info(
 		"outbox event processed",
 		"event_id", event.ID,

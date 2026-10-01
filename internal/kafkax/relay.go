@@ -8,7 +8,17 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 )
+
+// HeaderMap returns a record's headers as a map, for telemetry.Extract.
+func HeaderMap(rec *kgo.Record) map[string]string {
+	m := make(map[string]string, len(rec.Headers))
+	for _, h := range rec.Headers {
+		m[h.Key] = string(h.Value)
+	}
+	return m
+}
 
 // Relay is an outbox handler that publishes events to Kafka.
 //
@@ -64,6 +74,13 @@ func (r *Relay) Handler() outbox.Handler {
 				{Key: "event_id", Value: []byte(event.ID.String())},
 				{Key: "event_type", Value: []byte(event.EventType)},
 			},
+		}
+
+		// Trace context travels in record headers (W3C traceparent), so
+		// the consumer's span joins the trace of the request that caused
+		// this event, across the asynchronous hop.
+		for k, v := range telemetry.Inject(ctx) {
+			record.Headers = append(record.Headers, kgo.RecordHeader{Key: k, Value: []byte(v)})
 		}
 
 		// ProduceSync waits for the broker's acknowledgement. Returning

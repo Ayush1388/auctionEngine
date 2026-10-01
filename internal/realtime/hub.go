@@ -156,6 +156,14 @@ func (h *Hub) Close() {
 	}
 }
 
+// Counters reports how many messages were delivered to clients and how many
+// slow clients were disconnected because their buffer was full (v1.0
+// metrics). A rising dropped count means clients can't keep up, or the
+// buffer is too small for the bid rate.
+func (h *Hub) Counters() (delivered, dropped int64) {
+	return h.delivered.Load(), h.dropped.Load()
+}
+
 // Stats reports how many clients are connected and how many rooms exist.
 func (h *Hub) Stats() (clients, rooms int) {
 	h.mu.RLock()

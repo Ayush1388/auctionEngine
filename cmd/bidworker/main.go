@@ -18,13 +18,18 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
 	"github.com/Ayush1388/auctionEngine/internal/bidqueue"
 	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/health"
 	"github.com/Ayush1388/auctionEngine/internal/kafkax"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
+	"github.com/Ayush1388/auctionEngine/internal/server"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 )
 
 func main() {
@@ -50,11 +55,22 @@ func run(logger *slog.Logger) error {
 		count = n
 	}
 
+	shutdownTracing, err := telemetry.Setup(context.Background(), "auction-bidworker")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracing(ctx)
+	}()
+
 	db, err := database.NewPostgresPool(dbURL)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+	metrics.RegisterPool(db)
 
 	topics := kafkax.TopicsWithPrefix(os.Getenv("KAFKA_TOPIC_PREFIX"))
 	producer, err := kafkax.NewProducer(brokers)
@@ -62,6 +78,15 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	defer producer.Close()
+
+	// The worker has no public port, so its probes and metrics live on the
+	// admin listener (ADMIN_ADDR, e.g. :9092). Kafka is critical HERE: a
+	// bid worker that can't reach Kafka has nothing to do.
+	checker := health.New()
+	checker.Add("postgres", true, db.Ping)
+	checker.Add("kafka", true, producer.Ping)
+	stopAdmin := server.StartAdmin(os.Getenv("ADMIN_ADDR"), checker, logger)
+	defer stopAdmin(context.Background())
 
 	strategy := bidding.Pessimistic
 	if os.Getenv("BID_STRATEGY") == "optimistic" {

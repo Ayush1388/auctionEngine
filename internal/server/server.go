@@ -12,8 +12,12 @@ import (
 	"github.com/Ayush1388/auctionEngine/api"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
+	"github.com/Ayush1388/auctionEngine/internal/health"
+	"github.com/Ayush1388/auctionEngine/internal/httpx"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
 	"github.com/Ayush1388/auctionEngine/internal/middleware"
 	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 )
 
@@ -36,6 +40,9 @@ type Deps struct {
 	Realtime http.Handler
 
 	Auth *auth.Middleware
+
+	// Health serves /livez and /readyz (v1.0). nil: both always answer 200.
+	Health *health.Checker
 
 	// Limiter enforces Limits. nil disables rate limiting (tests).
 	Limiter  ratelimit.Limiter
@@ -94,6 +101,8 @@ func routes(d Deps) []Route {
 
 	return []Route{
 		{"GET", "/v1/healthcheck", http.HandlerFunc(handlers.Healthcheck)},
+		{"GET", "/livez", http.HandlerFunc(d.Health.Live)},
+		{"GET", "/readyz", http.HandlerFunc(d.Health.Ready)},
 		{"GET", "/v1/openapi.json", http.HandlerFunc(api.ServeOpenAPI)},
 
 		// Users and sessions
@@ -163,10 +172,14 @@ func Routes(d Deps) http.Handler {
 	if d.ClientIP == nil {
 		d.ClientIP, _ = ratelimit.NewClientIP(nil)
 	}
+	if d.Health == nil {
+		d.Health = health.New()
+	}
 
 	mux := http.NewServeMux()
 	for _, r := range routes(d) {
-		mux.Handle(r.Method+" "+r.Pattern, r.Handler)
+		// Tagged records the matched pattern for metrics and traces.
+		mux.Handle(r.Method+" "+r.Pattern, httpx.Tagged(r.Handler))
 	}
 
 	global := http.Handler(mux)
@@ -174,9 +187,15 @@ func Routes(d Deps) http.Handler {
 		global = ratelimit.Middleware(d.Limiter, d.Limits.Global, d.ClientIP.ByIP(), mux)
 	}
 
+	// metrics is outermost so it also counts the 500s Recover writes, and
+	// the 429s and 403s answered before the router. telemetry comes after
+	// RequestID because it adds trace_id to the logger RequestID created,
+	// and before AccessLog so access-log lines carry the trace ID.
 	return middleware.Chain(global,
+		metrics.Middleware,
 		middleware.Recover,
 		middleware.RequestID(d.Logger),
+		telemetry.Middleware,
 		middleware.AccessLog,
 		middleware.SecurityHeaders(d.HSTS),
 		middleware.CORS(d.CORSOrigins),

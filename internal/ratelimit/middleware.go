@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Ayush1388/auctionEngine/internal/httpx"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
 )
 
 // KeyFunc picks what a request is limited by: its IP, its user, ...
@@ -46,6 +47,7 @@ func Middleware(l Limiter, rule Rule, key KeyFunc, next http.Handler) http.Handl
 
 		if !d.Allowed {
 			w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(d.RetryAfter.Seconds()))))
+			metrics.RateLimited.WithLabelValues(rule.Name).Inc()
 			httpx.Error(w, http.StatusTooManyRequests, "too many requests, slow down")
 			return
 		}

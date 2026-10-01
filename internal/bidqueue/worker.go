@@ -5,15 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
+	"github.com/Ayush1388/auctionEngine/internal/kafkax"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
 
@@ -62,6 +68,7 @@ type Placer func(ctx context.Context, in bidding.PlaceBidInput) (bidding.Result,
 // and no processed-but-uncommitted work is handed to someone else.
 type Worker struct {
 	client   *kgo.Client
+	group    string
 	producer *kgo.Client // for the dead-letter topic
 	dlqTopic string
 	place    Placer
@@ -90,7 +97,7 @@ func NewWorker(brokers []string, group, topic, dlqTopic string, producer *kgo.Cl
 		return nil, err
 	}
 	return &Worker{
-		client: client, producer: producer, dlqTopic: dlqTopic,
+		client: client, group: group, producer: producer, dlqTopic: dlqTopic,
 		place: place, requests: requests, logger: logger,
 		MaxAttempts: 5, Backoff: 200 * time.Millisecond,
 	}, nil
@@ -119,6 +126,7 @@ func (w *Worker) Run(ctx context.Context) {
 		var wg sync.WaitGroup
 		var stopped atomic.Bool
 		fetches.EachPartition(func(p kgo.FetchTopicPartition) {
+			w.recordLag(p)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -146,13 +154,45 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
+// recordLag publishes consumer lag: how many records sit in the partition
+// beyond the ones just fetched. HighWatermark is the offset the NEXT record
+// will get, so lag = HighWatermark - (last fetched offset + 1).
+//
+// Lag is THE health signal for a consumer: if it keeps growing, workers
+// can't keep up and async bids wait longer and longer. That is the number
+// to alert on and to scale the worker count by.
+func (w *Worker) recordLag(p kgo.FetchTopicPartition) {
+	if len(p.Records) == 0 {
+		return
+	}
+	last := p.Records[len(p.Records)-1].Offset
+	lag := p.HighWatermark - (last + 1)
+	if lag < 0 {
+		lag = 0
+	}
+	metrics.KafkaLag.WithLabelValues(w.group, p.Topic, strconv.Itoa(int(p.Partition))).Set(float64(lag))
+}
+
 // handle processes one record. It returns false only if ctx was cancelled
 // before the record was finished.
 func (w *Worker) handle(ctx context.Context, rec *kgo.Record) bool {
+	// Continue the trace from the record headers (set by the relay).
+	ctx = telemetry.Extract(ctx, kafkax.HeaderMap(rec))
+	ctx, span := telemetry.Tracer().Start(ctx, "kafka process bid command",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "kafka"),
+			attribute.String("messaging.destination.name", rec.Topic),
+			attribute.Int("messaging.kafka.partition", int(rec.Partition)),
+			attribute.Int64("messaging.kafka.offset", rec.Offset),
+		))
+	defer span.End()
+
 	var cmd Command
 	if err := json.Unmarshal(rec.Value, &cmd); err != nil || cmd.RequestID == uuid.Nil {
 		// Unparseable: retrying can never help. Dead-letter it.
 		w.deadLetter(ctx, rec, "malformed command")
+		metrics.BidQueue.WithLabelValues("malformed").Inc()
 		return true
 	}
 
@@ -164,6 +204,7 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) bool {
 				w.logger.Warn("record outcome failed, retrying", "request_id", cmd.RequestID, "error", err)
 			} else {
 				w.processed.Add(1)
+				metrics.BidQueue.WithLabelValues(string(outcome.Status)).Inc()
 				return true
 			}
 		}
@@ -174,6 +215,8 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) bool {
 			w.logger.Error("bid command failed permanently", "request_id", cmd.RequestID, "error", err)
 			w.deadLetter(ctx, rec, errString(err))
 			_ = w.requests.Record(context.WithoutCancel(ctx), cmd.RequestID, Outcome{Status: StatusFailed, Reason: "could not be processed, please retry"})
+			telemetry.RecordError(span, err)
+			metrics.BidQueue.WithLabelValues(string(StatusFailed)).Inc()
 			w.processed.Add(1)
 			return true
 		}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
 	"github.com/Ayush1388/auctionEngine/internal/validation"
 )
 
@@ -42,6 +43,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (Page, error) {
 	if s.primary != nil {
 		page, err := s.primary.Search(ctx, q)
 		if err == nil {
+			metrics.SearchRequests.WithLabelValues(s.primary.Name(), "false").Inc()
 			return page, nil
 		}
 		if err == ErrInvalidCursor {
@@ -50,6 +52,10 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (Page, error) {
 		s.logger.Warn("search backend failed, falling back", "backend", s.primary.Name(), "error", err)
 	}
 
+	// fallback="true" means the primary was configured but failed: a rising
+	// rate of these is the alert that Elasticsearch is in trouble, even
+	// though users still get results.
+	metrics.SearchRequests.WithLabelValues(s.fallback.Name(), strconv.FormatBool(s.primary != nil)).Inc()
 	page, err := s.fallback.Search(ctx, q)
 	if err == ErrInvalidCursor {
 		return Page{}, invalidCursor()

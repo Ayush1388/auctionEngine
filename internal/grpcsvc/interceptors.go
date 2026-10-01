@@ -14,12 +14,13 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/Ayush1388/auctionEngine/internal/logctx"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 )
 
 // Interceptors are gRPC's middleware: functions wrapped around every call.
 // The server chain, outermost first:
 //
-//	recover → request ID + logging → auth → default deadline → handler
+//	recover → trace + metrics → request ID + logging → auth → default deadline → handler
 //
 // Metadata is gRPC's equivalent of HTTP headers (it travels as HTTP/2
 // headers). Keys are lower-case.
@@ -43,12 +44,14 @@ func ServerOptions(logger *slog.Logger, internalToken string) []grpc.ServerOptio
 	return []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(
 			unaryRecover(logger),
+			unaryObserve(),
 			unaryLog(logger),
 			unaryAuth(internalToken),
 			unaryDeadline(DefaultCallTimeout),
 		),
 		grpc.ChainStreamInterceptor(
 			streamRecover(logger),
+			streamObserve(),
 			streamLog(logger),
 			streamAuth(internalToken),
 		),
@@ -194,18 +197,24 @@ func (w *wrappedStream) Context() context.Context { return w.ctx }
 // and a default deadline when the caller didn't set one.
 func clientUnary(token string, timeout time.Duration) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		ctx, span := clientSpan(ctx, method)
+		defer span.End()
 		ctx = outgoing(ctx, token)
 		if _, ok := ctx.Deadline(); !ok {
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, timeout)
 			defer cancel()
 		}
-		return invoker(ctx, method, req, reply, cc, opts...)
+		err := invoker(ctx, method, req, reply, cc, opts...)
+		telemetry.RecordError(span, err)
+		return err
 	}
 }
 
 func clientStream(token string) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		// The stream can outlive this call, so no client span here; the
+		// trace context is still propagated.
 		return streamer(outgoing(ctx, token), desc, cc, method, opts...)
 	}
 }
@@ -218,8 +227,8 @@ func outgoing(ctx context.Context, token string) context.Context {
 	if id := logctx.RequestID(ctx); id != "" {
 		pairs = append(pairs, mdRequestID, id)
 	}
-	if len(pairs) == 0 {
-		return ctx
+	if len(pairs) > 0 {
+		ctx = metadata.AppendToOutgoingContext(ctx, pairs...)
 	}
-	return metadata.AppendToOutgoingContext(ctx, pairs...)
+	return injectTrace(ctx)
 }

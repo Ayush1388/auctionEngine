@@ -4,10 +4,13 @@
 //
 // The chain in server.Routes, outermost first:
 //
-//	Recover → RequestID → AccessLog → SecurityHeaders → CORS → rate limit → router → auth → handler
+//	metrics → Recover → RequestID → tracing → AccessLog → SecurityHeaders → CORS → rate limit → router → auth → handler
 //
-// Order matters. Recover must be outermost so a panic anywhere, including
-// in other middleware, becomes a 500 instead of a dropped connection.
+// Order matters. metrics (v1.0) is outermost so it also counts the 500s
+// Recover writes. Recover comes next so a panic anywhere, including in
+// other middleware, becomes a 500 instead of a dropped connection.
+// Tracing comes after RequestID because it adds trace_id to the logger
+// RequestID created.
 // RequestID comes before AccessLog so log lines carry the ID. CORS answers
 // preflight requests before rate limiting and auth, which browsers send
 // without credentials.
