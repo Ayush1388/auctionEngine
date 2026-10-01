@@ -4,13 +4,15 @@
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![Status](https://img.shields.io/badge/status-in%20progress-orange)
+![Status](https://img.shields.io/badge/version-v1.0-brightgreen)
 
 A backend for **live auctions** written in Go, with user wallets, bid reservations and reliable event delivery.
 
 The focus is on correctness under concurrency and failure: a user's signup and their activation email can never get out of sync, two workers can't move the same auction, a seller can't cancel an auction that has just gone live, and money can't go negative.
 
-> 🚧 **In progress.** Users, auth, the outbox pipeline and auction management (v0.2) work end to end, with integration tests against Postgres. Bidding (v0.3) is next.
+It started as a transactionally consistent monolith and grew, milestone by milestone, into a distributed system: PostgreSQL as the source of truth, Redis, Elasticsearch, WebSockets, Kafka, a bidding service over gRPC, and full observability. Every milestone is tested, including an end-to-end test against the deployed stack on every pull request.
+
+**Run the whole thing:** `cp deploy/.env.example deploy/.env` (fill in four secrets), then `docker compose -f deploy/compose.yml up -d --build --wait`. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 
@@ -161,7 +163,7 @@ A background worker activates and completes auctions on schedule. It claims batc
 - A **hand-written migration runner** with versioned up/down SQL files, tracked in `schema_migrations`
 - **`pgxpool`** connection pooling
 - Integrity enforced in the schema itself: `CHECK (available_amount >= 0)` on wallets, `CHECK (ends_at > starts_at)` on auctions, status enums and foreign keys throughout
-- Tables: `users`, `wallets`, `items`, `auctions`, `bids`, `bid_reservations`, `wallet_transactions`, `outbox_events`
+- Tables: `users`, `refresh_tokens`, `wallets`, `items`, `auctions`, `bids`, `bid_reservations`, `bid_requests`, `ledger_transactions`, `ledger_entries`, `outbox_events`
 
 ### Observability
 
@@ -181,27 +183,48 @@ A background worker activates and completes auctions on schedule. It claims batc
 
 - Structured **JSON logging** with `log/slog`
 - **Graceful shutdown**: on SIGINT/SIGTERM the HTTP server drains in-flight requests, then background workers finish their current event and stop, all within a 10-second deadline
-- **CI** on every pull request: `gofmt`, `go vet`, and `go test -race` against Postgres 18
-- A multi-stage **Docker** build that runs as a non-root user
+- **CI** on every pull request: `gofmt`, `go vet`, generated-code check, `go test -race` against PostgreSQL, Redis, Elasticsearch and Kafka, then the **full stack deployed with Compose**, an **end-to-end test** through every component, and a **rolling deploy under load** that must drop zero requests
+- **Container image** for amd64 and arm64, published to GitHub Container Registry from `main`
+- A multi-stage **Docker** build (one image, every binary) that runs as a non-root user
+- **Production deployment** with Compose ([`deploy/`](deploy/)): Caddy with automatic HTTPS and health-checked load balancing, two API instances, Prometheus alert rules, a provisioned Grafana dashboard, Jaeger, nightly backups, and a zero-downtime rollout script
 
 ---
 
 ## Architecture
 
 ```
-            ┌──────────────┐    one transaction      ┌───────────────────────────┐
- HTTP  ───► │  handlers →  │ ──────────────────────► │ PostgreSQL                │
- client     │  services →  │  state change +         │  users, items, auctions   │
-            │  repositories│  outbox_events          │  bids, outbox_events ...  │
-            └──────────────┘                         └──────┬─────────────┬──────┘
-                                         claim (SKIP LOCKED)│             │claim (SKIP LOCKED)
-                                     ┌──────────────────────▼───┐   ┌─────▼────────────────────┐
-                                     │ Lifecycle worker         │   │ Outbox worker            │ ──► SMTP
-                                     │ activate · complete      │   │ retry · lease · mark done│
-                                     └──────────────────────────┘   └──────────────────────────┘
+                         Clients (browser, mobile, CLI)
+                                     │ HTTPS · WebSocket
+                              ┌──────▼──────┐
+                              │    Caddy    │ TLS · load balancing · health checks
+                              └──┬───────┬──┘
+                       ┌─────────▼─┐   ┌─▼─────────┐
+                       │   api-1   │   │   api-2   │  HTTP API · WebSocket hub · rate limits
+                       │  outbox + lifecycle workers│  (gateway to the bidding service)
+                       └─────┬─────┘   └─────┬─────┘
+                             │     gRPC      │
+                       ┌─────▼───────────────▼─────┐        ┌──────────────┐
+                       │       biddingsvc          │        │  bidworker   │ consumer group
+                       │ PlaceBid · ListBids ·     │        │ (Kafka bids, │ one partition
+                       │ WatchAuction (stream)     │        │  per auction)│ each, in order
+                       └─────────────┬─────────────┘        └──────┬───────┘
+                                     │                             │
+ ┌───────────────────────────────────▼─────────────────────────────▼──────────────────────┐
+ │ PostgreSQL — source of truth: users, auctions, bids, wallets, ledger, outbox_events     │
+ └───────────────┬────────────────────────────────────────────────────────────────────────┘
+                 │ transactional outbox (same commit as the change)
+     ┌───────────┼───────────────┬────────────────────┬─────────────────────┐
+     ▼           ▼               ▼                    ▼                     ▼
+   SMTP     Elasticsearch      Redis              Redis pub/sub          Kafka
+  (email)   (search index)  (cache, trending)  (live fan-out to      (auction-events,
+                                                 every API instance)   auction-bids)
+
+ Observability: Prometheus (metrics, alerts) · Grafana (dashboards) · Jaeger (traces)
 ```
 
-Services own transaction boundaries; repositories accept anything that can run a query (pool or transaction) and never begin transactions themselves. See [`docs/decisions/0005`](docs/decisions/0005-transactions-owned-by-services.md).
+- **PostgreSQL is the only source of truth.** Every other store is fed from the transactional outbox and can be rebuilt.
+- **Services own transaction boundaries;** repositories accept anything that can run a query (pool or transaction) and never begin transactions themselves ([`0005`](docs/decisions/0005-transactions-owned-by-services.md)).
+- **Handlers depend on interfaces** (`handlers.Bidder`), so bidding moved into its own gRPC service without changing a handler.
 
 ## API
 
@@ -242,11 +265,21 @@ Errors are always JSON: `{"error": "..."}`, plus a `fields` map for validation e
 
 Prices are integers in the smallest currency unit (paise/cents).
 
-## Running locally
+## Running the full system
 
 ```bash
-# 1. Start Postgres (and Redis, optional)
-docker compose up -d
+cp deploy/.env.example deploy/.env    # fill in the four secrets (openssl rand -hex 32)
+make up                               # build and start everything, wait until healthy
+make e2e                              # end-to-end test against it
+```
+
+Then open <http://localhost> (API), <http://localhost:3000> (Grafana), <http://localhost:16686> (Jaeger) and <http://localhost:8025> (emails). Production setup, HTTPS, rolling deploys, backups and scaling are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Running locally for development
+
+```bash
+# 1. Start the dependencies (PostgreSQL, Redis, Elasticsearch, Kafka)
+make infra
 
 # 2. Configure (create a .env file in the project root)
 PORT=4000
@@ -290,7 +323,9 @@ export TEST_DATABASE_URL=postgres://auction:auction@localhost:5432/auction?sslmo
 go test -race ./...                             # unit + integration
 ```
 
-CI runs formatting checks, `go vet` and the full test suite against Postgres on every pull request.
+Integration tests for Redis, Elasticsearch and Kafka run when `TEST_REDIS_URL`, `TEST_ELASTICSEARCH_URL` and `TEST_KAFKA_BROKERS` are set, and are skipped otherwise. The end-to-end test (`e2e/`) runs against the deployed stack: `make up && make e2e`.
+
+CI runs all of it on every pull request.
 
 ## Project layout
 
@@ -333,6 +368,8 @@ internal/validation per-field validation messages
 internal/migration  migration runner (up/down, advisory lock)
 internal/testdb     isolated, migrated schema per integration test
 migrations/         versioned up/down SQL
+deploy/             production stack: compose.yml, Caddyfile, Prometheus, Grafana, rollout/backup/restore
+e2e/                end-to-end test against the deployed stack
 docs/decisions/     why things are built the way they are
 ```
 
@@ -349,6 +386,6 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.7 – Real-time** ✅: WebSocket rooms, heartbeats, backpressure, multi-instance fan-out
 - **v0.8 – Kafka** ✅: outbox relay, bids partitioned by auction, consumer groups, idempotent consumers, DLQ
 - **v0.9 – gRPC** ✅: bidding service, streaming, deadlines, interceptors, error details, safe retries
-- **v1.0 – Production** 🚧: observability (metrics, tracing, probes, pprof) ✅, resilience and load testing ✅, containerised deployment
+- **v1.0 – Production** ✅: observability (metrics, tracing, probes, pprof), resilience and load testing, containerised deployment with zero-downtime rollouts, backups and an end-to-end test in CI
 
-Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+Design decisions are recorded in [`docs/decisions/`](docs/decisions/), deployment in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), performance results in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md), and the development workflow in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
