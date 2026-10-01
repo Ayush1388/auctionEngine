@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "auctionEngine API",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "description": "Live auction and bidding backend. Amounts are integers in the smallest currency unit. Errors are {\"error\": \"...\"}; validation errors add a fields map. Most endpoints are rate limited (429 with Retry-After)."
   },
   "servers": [
@@ -1827,6 +1827,26 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/ws": {
+      "get": {
+        "tags": [
+          "realtime"
+        ],
+        "summary": "Live auction updates (WebSocket)",
+        "description": "Upgrade to a WebSocket. Send {\"action\":\"subscribe\",\"auction_id\":\"\u2026\"} to watch an auction; you receive {\"type\":\"auction.updated\",\"cause\":\"bid.placed\",\"auction\":{\u2026,\"version\":N}} on every change. Apply a snapshot only if its version is higher than the one you have. Read-only and public; bids are placed over REST. Close codes: 1001 server restarting (reconnect), 1008 too slow to keep up, 1009 message too big, 1013 at capacity (retry later).",
+        "responses": {
+          "101": {
+            "description": "Switching protocols"
+          },
+          "403": {
+            "description": "Origin not allowed"
+          },
+          "426": {
+            "description": "Not a WebSocket request"
           }
         }
       }

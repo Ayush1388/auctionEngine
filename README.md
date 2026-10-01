@@ -76,6 +76,17 @@ If Redis goes down, the cache reads PostgreSQL, trending is computed from Postgr
 
 See [`docs/decisions/0010`](docs/decisions/0010-search-as-a-read-model.md).
 
+### Live updates over WebSockets
+
+Connect to `GET /v1/ws`, send `{"action":"subscribe","auction_id":"…"}`, and every bid, extension or status change arrives as a snapshot within milliseconds. Try [`docs/examples/live-auction.html`](docs/examples/live-auction.html).
+
+- The outbox gives an event to **one** instance, but viewers are connected to **all** of them, so the snapshot is fanned out through **Redis pub/sub** to every instance's hub.
+- Each message carries the auction `version`, so clients drop out-of-order updates.
+- **Backpressure:** each connection has a bounded buffer and a single writer goroutine; a client too slow to keep up is disconnected instead of stalling the room.
+- **Heartbeats** detect dead connections; the origin allow-list blocks cross-site WebSocket hijacking; the connection cap sheds load with close code 1013.
+
+See [`docs/decisions/0011`](docs/decisions/0011-websocket-fanout.md).
+
 ### Auction lifecycle as a state machine
 
 ```
@@ -168,6 +179,7 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `GET` | `/v1/auctions/suggest` | | Type-ahead suggestions for active auctions: `?q=…` |
 | `GET` | `/v1/auctions/{id}` | | Get one auction with its item (cached in Redis) |
 | `POST` | `/v1/auctions/{id}/cancel` | JWT (owner) | Cancel an auction before it starts |
+| `GET` | `/v1/ws` | | WebSocket: subscribe to live auction updates |
 | `POST` | `/v1/auctions/{id}/bids` | JWT | Place a bid (send an `Idempotency-Key` header) |
 | `GET` | `/v1/auctions/{id}/bids` | | Bid history, newest first |
 | `GET` | `/v1/wallet` | JWT | Available and reserved balance |
@@ -248,6 +260,7 @@ internal/redisx     Redis client and conventions
 internal/auctioncache  cache-aside auction reads, singleflight, event invalidation
 internal/trending   hourly sorted-set ranking with Postgres fallback
 internal/search     Elasticsearch + PostgreSQL full-text backends, indexer, reindex
+internal/realtime   WebSocket hub, rooms, heartbeats, backpressure, Redis fan-out
 api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
@@ -270,6 +283,7 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.4 – Security** ✅: rate limiting, refresh tokens, RBAC, CORS, request IDs, OpenAPI
 - **v0.5 – Redis** ✅: cache-aside, stampede protection, trending, shared rate limits
 - **v0.6 – Search** ✅: Elasticsearch read model, typo tolerance, autocomplete, PostgreSQL fallback, zero-downtime reindex
-- **Later**: WebSockets, Kafka, gRPC, production hardening
+- **v0.7 – Real-time** ✅: WebSocket rooms, heartbeats, backpressure, multi-instance fan-out
+- **Later**: Kafka, gRPC, production hardening
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).

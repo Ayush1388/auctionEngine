@@ -31,6 +31,10 @@ type Deps struct {
 	Admin    *handlers.AdminHandler
 	Search   *handlers.SearchHandler
 
+	// Realtime serves WebSocket upgrades (v0.7). nil in tests that don't
+	// need it.
+	Realtime http.Handler
+
 	Auth *auth.Middleware
 
 	// Limiter enforces Limits. nil disables rate limiting (tests).
@@ -110,6 +114,9 @@ func routes(d Deps) []Route {
 		{"GET", "/v1/auctions/{id}", http.HandlerFunc(d.Auctions.Get)},
 		{"POST", "/v1/auctions/{id}/cancel", protected(d.Auctions.Cancel)},
 
+		// Live updates over WebSocket (public, read-only stream).
+		{"GET", "/v1/ws", realtimeOr(d.Realtime)},
+
 		// Bidding: rate limited per user, after authentication.
 		{"POST", "/v1/auctions/{id}/bids", d.Auth.Authenticate(limited(d.Limits.Bids, byUser, http.HandlerFunc(d.Bids.Place)))},
 		{"GET", "/v1/auctions/{id}/bids", http.HandlerFunc(d.Bids.History)},
@@ -124,6 +131,16 @@ func routes(d Deps) []Route {
 		{"GET", "/v1/admin/outbox/failed", admin(d.Admin.FailedEvents)},
 		{"POST", "/v1/admin/outbox/{id}/retry", admin(d.Admin.RetryEvent)},
 	}
+}
+
+// realtimeOr returns h, or a 503 handler when WebSockets aren't wired.
+func realtimeOr(h http.Handler) http.Handler {
+	if h != nil {
+		return h
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "live updates are not available", http.StatusServiceUnavailable)
+	})
 }
 
 // Patterns lists "METHOD /path" for every route (used by the OpenAPI test).
@@ -195,6 +212,13 @@ func (s *Server) Start() error {
 // free port.
 func (s *Server) Serve(l net.Listener) error {
 	return ignoreClosed(s.httpServer.Serve(l))
+}
+
+// RegisterOnShutdown runs f when Shutdown starts. WebSocket connections are
+// "hijacked" from net/http, so Shutdown neither waits for nor closes them;
+// the realtime hub registers here to close them itself.
+func (s *Server) RegisterOnShutdown(f func()) {
+	s.httpServer.RegisterOnShutdown(f)
 }
 
 // Shutdown stops accepting new connections and waits for in-flight

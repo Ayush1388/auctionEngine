@@ -15,5 +15,6 @@ They are written once and rarely edited. If a decision changes, add a new note t
 | [0008](0008-access-and-refresh-tokens.md) | Short access tokens, rotating refresh tokens, per-account throttling | Accepted |
 | [0009](0009-redis-as-a-disposable-accelerator.md) | Redis as a disposable accelerator | Accepted |
 | [0010](0010-search-as-a-read-model.md) | Elasticsearch as a read model, fed by the outbox | Accepted |
+| [0011](0011-websocket-fanout.md) | WebSocket live updates with Redis pub/sub fan-out | Accepted |
 
 To add one, copy [`template.md`](template.md) and take the next number.
