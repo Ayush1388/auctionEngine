@@ -64,6 +64,18 @@ Redis only holds data that is cheap to lose ([`0009`](docs/decisions/0009-redis-
 
 If Redis goes down, the cache reads PostgreSQL, trending is computed from PostgreSQL, and rate limits fail open.
 
+### Search: Elasticsearch as a read model
+
+`GET /v1/auctions/search?q=vintage camra` tolerates typos, ranks title matches first and highlights what matched. `GET /v1/auctions/suggest?q=iph` autocompletes from edge n-grams.
+
+- PostgreSQL stays the source of truth. The index is fed by **outbox events**, never written to directly by handlers.
+- **External versioning** (`auctions.version`, bumped by a trigger on every update) means a late or duplicate event can't roll a document back.
+- Search returns IDs and the auctions are loaded from PostgreSQL in **one query**, avoiding N+1 and showing exact prices.
+- If Elasticsearch is down or not configured, **PostgreSQL full-text search** (generated `tsvector` + GIN index) answers instead.
+- `go run ./cmd/admin reindex` rebuilds the index with **zero downtime** by swapping an alias.
+
+See [`docs/decisions/0010`](docs/decisions/0010-search-as-a-read-model.md).
+
 ### Auction lifecycle as a state machine
 
 ```
@@ -152,6 +164,8 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `POST` | `/v1/auctions` | JWT | List an item for auction |
 | `GET` | `/v1/auctions` | optional | List auctions, newest first: `?status=ACTIVE&owner=me&limit=20&cursor=…` |
 | `GET` | `/v1/auctions/trending` | | Active auctions with the most bids in the last hour |
+| `GET` | `/v1/auctions/search` | | Full-text search: `?q=…&status=&limit=&cursor=` |
+| `GET` | `/v1/auctions/suggest` | | Type-ahead suggestions for active auctions: `?q=…` |
 | `GET` | `/v1/auctions/{id}` | | Get one auction with its item (cached in Redis) |
 | `POST` | `/v1/auctions/{id}/cancel` | JWT (owner) | Cancel an auction before it starts |
 | `POST` | `/v1/auctions/{id}/bids` | JWT | Place a bid (send an `Idempotency-Key` header) |
@@ -192,6 +206,7 @@ SMTP_PASSWORD=...
 SMTP_FROM=no-reply@auction.local
 APP_BASE_URL=http://localhost:4000
 REDIS_URL=redis://localhost:6379/0   # optional
+ELASTICSEARCH_URL=http://localhost:9200   # optional
 
 # 3. Run migrations, then the API
 go run ./cmd/migrate
@@ -232,6 +247,7 @@ internal/logctx     request-scoped logger in the context
 internal/redisx     Redis client and conventions
 internal/auctioncache  cache-aside auction reads, singleflight, event invalidation
 internal/trending   hourly sorted-set ranking with Postgres fallback
+internal/search     Elasticsearch + PostgreSQL full-text backends, indexer, reindex
 api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
@@ -253,6 +269,7 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.3 – Bidding** ✅: wallet reservations, concurrent bids, double-entry ledger, settlement, idempotency, anti-sniping
 - **v0.4 – Security** ✅: rate limiting, refresh tokens, RBAC, CORS, request IDs, OpenAPI
 - **v0.5 – Redis** ✅: cache-aside, stampede protection, trending, shared rate limits
-- **Later**: search, WebSockets, Kafka, gRPC, production hardening
+- **v0.6 – Search** ✅: Elasticsearch read model, typo tolerance, autocomplete, PostgreSQL fallback, zero-downtime reindex
+- **Later**: WebSockets, Kafka, gRPC, production hardening
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).

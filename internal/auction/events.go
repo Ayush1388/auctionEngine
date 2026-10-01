@@ -21,6 +21,9 @@ type CompletedEvent struct {
 // opens for bidding or is cancelled. Consumers: cache invalidation (v0.5),
 // search indexing (v0.6), live updates (v0.7).
 const (
+	// EventTypeCreated is emitted when an auction is listed (v0.6: search
+	// indexing needs to know about new auctions).
+	EventTypeCreated   = "auction.created"
 	EventTypeActivated = "auction.activated"
 	EventTypeCancelled = "auction.cancelled"
 )
