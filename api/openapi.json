@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "auctionEngine API",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "description": "Live auction and bidding backend. Amounts are integers in the smallest currency unit. Errors are {\"error\": \"...\"}; validation errors add a fields map. Most endpoints are rate limited (429 with Retry-After)."
   },
   "servers": [
@@ -349,6 +349,52 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "BidRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "auction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ACCEPTED",
+              "REJECTED",
+              "FAILED"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "bid_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minimum_amount": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status_url": {
+            "type": "string"
           }
         }
       }
@@ -1070,6 +1116,15 @@
               "maxLength": 255
             },
             "description": "Unique per logical request; retries with the same key return the original result."
+          },
+          {
+            "name": "Prefer",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "example": "respond-async"
+            },
+            "description": "Send \"respond-async\" to queue the bid through Kafka instead of placing it in the request. The response is then 202 with a bid request to poll. Ignored when Kafka is not configured."
           }
         ],
         "requestBody": {
@@ -1188,6 +1243,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Queued (Prefer: respond-async). Poll status_url or watch the WebSocket feed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BidRequest"
                 }
               }
             }
@@ -1847,6 +1912,62 @@
           },
           "426": {
             "description": "Not a WebSocket request"
+          }
+        }
+      }
+    },
+    "/v1/bid-requests/{id}": {
+      "get": {
+        "tags": [
+          "bids"
+        ],
+        "summary": "Outcome of an asynchronous bid",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request and, once processed, its outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BidRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not logged in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such request, or not yours",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
