@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 )
 
 // NewPostgresPool creates a pgx connection pool and checks it can reach the
@@ -25,6 +27,11 @@ func NewPostgresPool(databaseURL string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Every query becomes a span in the request's trace (v1.0). The tracer
+	// records only SQL text, never arguments, and only inside an existing
+	// trace, so background polling doesn't flood the tracing backend.
+	config.ConnConfig.Tracer = telemetry.PGXTracer{}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -31,8 +31,12 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/database"
 	pb "github.com/Ayush1388/auctionEngine/internal/gen/biddingv1"
 	"github.com/Ayush1388/auctionEngine/internal/grpcsvc"
+	apphealth "github.com/Ayush1388/auctionEngine/internal/health"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
 	"github.com/Ayush1388/auctionEngine/internal/realtime"
 	"github.com/Ayush1388/auctionEngine/internal/redisx"
+	"github.com/Ayush1388/auctionEngine/internal/server"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 )
 
 func main() {
@@ -60,11 +64,24 @@ func run(logger *slog.Logger) error {
 		logger.Warn("INTERNAL_TOKEN is empty: any caller can use this service (development only)")
 	}
 
+	shutdownTracing, err := telemetry.Setup(context.Background(), "auction-biddingsvc")
+	if err != nil {
+		return err
+	}
+	defer flush(shutdownTracing)
+
 	db, err := database.NewPostgresPool(dbURL)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+	metrics.RegisterPool(db)
+
+	// ADMIN_ADDR (e.g. :9091) serves /metrics and pprof.
+	checker := apphealth.New()
+	checker.Add("postgres", true, db.Ping)
+	stopAdmin := server.StartAdmin(os.Getenv("ADMIN_ADDR"), checker, logger)
+	defer stopAdmin(context.Background())
 
 	strategy := bidding.Pessimistic
 	if os.Getenv("BID_STRATEGY") == "optimistic" {
@@ -130,4 +147,11 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("bidding service stopped")
 	return nil
+}
+
+// flush exports buffered spans before the process exits.
+func flush(shutdown func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = shutdown(ctx)
 }

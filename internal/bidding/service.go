@@ -10,10 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
 
@@ -67,7 +71,60 @@ func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
 // PlaceBid places a bid, or returns the original result when the same
 // idempotency key was used before.
-func (s *Service) PlaceBid(ctx context.Context, in PlaceBidInput) (Result, error) {
+func (s *Service) PlaceBid(ctx context.Context, in PlaceBidInput) (res Result, err error) {
+	// Observability (v1.0): a span per bid (its SQL statements become child
+	// spans through the pgx tracer) and the bid outcome/latency metrics.
+	ctx, span := telemetry.Tracer().Start(ctx, "bidding.PlaceBid", trace.WithAttributes(
+		attribute.String("auction.id", in.AuctionID.String()),
+		attribute.String("bidding.strategy", string(s.strategy)),
+	))
+	start := time.Now()
+	defer func() {
+		result := Outcome(res, err)
+		span.SetAttributes(attribute.String("bidding.result", result))
+		if result == "error" {
+			telemetry.RecordError(span, err)
+		}
+		span.End()
+		metrics.Bids.WithLabelValues(result).Inc()
+		metrics.BidDuration.WithLabelValues(string(s.strategy)).Observe(time.Since(start).Seconds())
+	}()
+
+	return s.placeBid(ctx, in)
+}
+
+// Outcome names a PlaceBid result for metrics and traces. It maps every
+// error to one of a FIXED set of strings: label values must be bounded, so
+// an error message (which contains amounts) must never become a label.
+func Outcome(res Result, err error) string {
+	var tooLow *BidTooLowError
+	switch {
+	case err == nil && res.Replayed:
+		return "replayed"
+	case err == nil:
+		return "accepted"
+	case errors.As(err, &tooLow):
+		return "too_low"
+	case errors.Is(err, wallet.ErrInsufficientFunds):
+		return "insufficient_funds"
+	case errors.Is(err, ErrAuctionNotActive):
+		return "not_active"
+	case errors.Is(err, ErrAuctionEnded):
+		return "ended"
+	case errors.Is(err, ErrOwnAuction):
+		return "own_auction"
+	case errors.Is(err, ErrContention):
+		return "contention"
+	case errors.Is(err, auction.ErrNotFound):
+		return "not_found"
+	case errors.Is(err, ErrInvalidAmount), errors.Is(err, ErrInvalidKey), errors.Is(err, ErrIdempotencyMismatch):
+		return "invalid"
+	default:
+		return "error"
+	}
+}
+
+func (s *Service) placeBid(ctx context.Context, in PlaceBidInput) (Result, error) {
 	if len(in.IdempotencyKey) > MaxIdempotencyKeyLength {
 		return Result{}, ErrInvalidKey
 	}

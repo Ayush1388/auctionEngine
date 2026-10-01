@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "auctionEngine API",
-    "version": "0.8.0",
+    "version": "1.0.0",
     "description": "Live auction and bidding backend. Amounts are integers in the smallest currency unit. Errors are {\"error\": \"...\"}; validation errors add a fields map. Most endpoints are rate limited (429 with Retry-After)."
   },
   "servers": [
@@ -406,7 +406,7 @@
         "tags": [
           "meta"
         ],
-        "summary": "Liveness",
+        "summary": "Liveness (legacy; prefer /livez)",
         "responses": {
           "200": {
             "description": "OK",
@@ -1965,6 +1965,101 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/livez": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Liveness probe: the process is up. Never checks dependencies.",
+        "responses": {
+          "200": {
+            "description": "Alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Readiness probe: PostgreSQL reachable and not shutting down. Optional dependencies are reported but don't fail it.",
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "unavailable",
+                        "draining"
+                      ]
+                    },
+                    "checks": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "fail"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready (critical dependency down, or draining)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "unavailable",
+                        "draining"
+                      ]
+                    },
+                    "checks": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "fail"
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }

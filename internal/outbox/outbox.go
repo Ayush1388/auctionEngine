@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 )
 
 // Event is one row of outbox_events as the worker sees it.
@@ -34,6 +35,10 @@ type Event struct {
 	Payload     json.RawMessage
 	Attempts    int
 	AvailableAt time.Time
+
+	// TraceContext is the W3C trace context of the request that enqueued
+	// the event (v1.0), so its processing joins the same trace.
+	TraceContext map[string]string
 }
 
 type Repository struct {
@@ -94,7 +99,8 @@ func (r *Repository) Claim(
 			e.event_type,
 			e.payload,
 			e.attempts,
-			e.available_at
+			e.available_at,
+			e.trace_context
 		`,
 		limit,
 	)
@@ -117,6 +123,7 @@ func (r *Repository) Claim(
 			&event.Payload,
 			&event.Attempts,
 			&event.AvailableAt,
+			&event.TraceContext,
 		); err != nil {
 			return nil, fmt.Errorf(
 				"failed to scan outbox event: %w",
@@ -255,6 +262,9 @@ func (r *Repository) Retry(
 
 // Enqueue adds an event to the outbox. Pass the transaction that makes the
 // change the event describes, so both are committed or neither is.
+//
+// The current trace context (if ctx carries a span) is stored with the
+// event, so the worker that handles it continues the same trace.
 func Enqueue(
 	ctx context.Context,
 	db database.DBTX,
@@ -275,13 +285,15 @@ func Enqueue(
 		INSERT INTO outbox_events (
 			id,
 			event_type,
-			payload
+			payload,
+			trace_context
 		)
-		VALUES ($1, $2, $3)
+		VALUES ($1, $2, $3, $4)
 		`,
 		uuid.New(),
 		eventType,
 		payloadBytes,
+		telemetry.Inject(ctx), // nil map → SQL NULL
 	)
 	if err != nil {
 		return fmt.Errorf(
@@ -359,4 +371,19 @@ func (r *Repository) RetryFailed(ctx context.Context, id uuid.UUID) error {
 		return ErrNotFailed
 	}
 	return nil
+}
+
+// Backlog counts events still waiting to be delivered and events parked as
+// dead letters (v1.0 metrics). A growing pending count means the worker
+// can't keep up or a consumer is failing; any dead letter needs a human.
+// Both counts use the partial indexes on outbox_events.
+func (r *Repository) Backlog(ctx context.Context) (pending, failed int64, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE failed_at IS NULL),
+			count(*) FILTER (WHERE failed_at IS NOT NULL)
+		FROM outbox_events
+		WHERE processed_at IS NULL
+	`).Scan(&pending, &failed)
+	return pending, failed, err
 }

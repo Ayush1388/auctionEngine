@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
+
 	"github.com/Ayush1388/auctionEngine/internal/migration"
 )
 
@@ -51,6 +53,8 @@ func New(t testing.TB) *pgxpool.Pool {
 		t.Fatalf("parse config: %v", err)
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = schema
+	// Same SQL tracing as production (database.NewPostgresPool).
+	config.ConnConfig.Tracer = telemetry.PGXTracer{}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
