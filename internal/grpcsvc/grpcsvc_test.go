@@ -20,6 +20,7 @@ import (
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
+	"github.com/Ayush1388/auctionEngine/internal/breaker"
 	pb "github.com/Ayush1388/auctionEngine/internal/gen/biddingv1"
 	"github.com/Ayush1388/auctionEngine/internal/grpcsvc"
 	"github.com/Ayush1388/auctionEngine/internal/realtime"
@@ -274,5 +275,49 @@ func TestHealthCheck(t *testing.T) {
 	resp, err := healthpb.NewHealthClient(e.conn).Check(context.Background(), &healthpb.HealthCheckRequest{})
 	if err != nil || resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
 		t.Fatalf("health: %v %v", resp, err)
+	}
+}
+
+// With the bidding service down, the breaker opens after a few failures
+// and later calls fail at once with ErrUnavailable (HTTP 503), without
+// waiting on the network. Business errors never open it.
+func TestBreakerFailsFastWhenServiceIsDown(t *testing.T) {
+	e := start(t, token)
+	a := e.activeAuction(t)
+	bidder := e.user(100_000)
+	b := breaker.New("bidding-test", breaker.Options{Threshold: 2, Cooldown: time.Hour, IsFailure: grpcsvc.BreakerFailure})
+	client := grpcsvc.NewClientFromConn(e.conn).WithBreaker(b)
+	ctx := context.Background()
+
+	// Rejections are the service working correctly: breaker stays closed.
+	for range 5 {
+		if _, err := client.PlaceBid(ctx, bidding.PlaceBidInput{AuctionID: a, UserID: bidder, Amount: 1}); errors.Is(err, bidding.ErrUnavailable) {
+			t.Fatalf("too-low bid reported as unavailable: %v", err)
+		}
+	}
+	if b.State() != breaker.Closed {
+		t.Fatalf("business errors opened the breaker")
+	}
+
+	e.srv.Stop()
+	for range 2 {
+		short, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		_, err := client.PlaceBid(short, bidding.PlaceBidInput{AuctionID: a, UserID: bidder, Amount: 2000})
+		cancel()
+		if !errors.Is(err, bidding.ErrUnavailable) {
+			t.Fatalf("service down: %v", err)
+		}
+	}
+	if b.State() != breaker.Open {
+		t.Fatalf("state = %s, want open", b.State())
+	}
+
+	start := time.Now()
+	_, err := client.PlaceBid(ctx, bidding.PlaceBidInput{AuctionID: a, UserID: bidder, Amount: 2000})
+	if !errors.Is(err, bidding.ErrUnavailable) || !errors.Is(err, breaker.ErrOpen) {
+		t.Fatalf("open breaker: %v", err)
+	}
+	if time.Since(start) > 50*time.Millisecond {
+		t.Fatalf("open breaker still waited %s", time.Since(start))
 	}
 }

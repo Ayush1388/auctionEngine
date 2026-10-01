@@ -19,6 +19,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
 	"github.com/Ayush1388/auctionEngine/internal/bidqueue"
+	"github.com/Ayush1388/auctionEngine/internal/breaker"
 	"github.com/Ayush1388/auctionEngine/internal/config"
 	"github.com/Ayush1388/auctionEngine/internal/database"
 	"github.com/Ayush1388/auctionEngine/internal/email"
@@ -162,6 +163,20 @@ func main() {
 	// Email
 	// --------------------------------------------------
 
+	// Circuit breakers (v1.0) fail fast while a dependency is down
+	// instead of every call waiting for its timeout. State changes are
+	// logged and exported as auction_circuit_breaker_state{name}.
+	newBreaker := func(name string, isFailure func(error) bool) *breaker.Breaker {
+		return breaker.New(name, breaker.Options{
+			Threshold: 5,
+			Cooldown:  10 * time.Second,
+			IsFailure: isFailure,
+			OnStateChange: func(name string, from, to breaker.State) {
+				logger.Warn("circuit breaker state changed", "breaker", name, "from", from.String(), "to", to.String())
+			},
+		})
+	}
+
 	emailService := email.NewService(
 		cfg.SMTPHost,
 		cfg.SMTPPort,
@@ -169,7 +184,7 @@ func main() {
 		cfg.SMTPPassword,
 		cfg.SMTPFrom,
 		cfg.AppBaseURL,
-	)
+	).WithBreaker(newBreaker("smtp", nil))
 
 	// --------------------------------------------------
 	// Outbox
@@ -243,7 +258,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer client.Close()
-		bidder = client
+		bidder = client.WithBreaker(newBreaker("bidding-grpc", grpcsvc.BreakerFailure))
 		logger.Info("bidding via gRPC", "addr", cfg.BiddingGRPCAddr)
 	}
 
@@ -355,11 +370,14 @@ func main() {
 		}
 		cancelEnsure()
 
-		indexer := search.NewIndexer(elastic, auctionService.Get, logger)
+		// Reads and index writes share one breaker: both fail the same way
+		// when the cluster is down.
+		guarded := search.NewGuarded(elastic, newBreaker("elasticsearch", search.SearchFailure))
+		indexer := search.NewIndexer(guarded, auctionService.Get, logger)
 		for _, eventType := range auctionEvents {
 			outboxRouter.Register(eventType, indexer.Handler())
 		}
-		primarySearch = elastic
+		primarySearch = guarded
 	}
 	searchService := search.NewService(primarySearch, search.NewPostgres(db), logger)
 
@@ -510,7 +528,8 @@ func main() {
 			Realtime: realtime.NewHandler(hub, realtime.Options{
 				OriginPatterns: realtime.OriginPatterns(cfg.CORSAllowedOrigins),
 			}, logger),
-			HSTS: cfg.Environment == "production",
+			HSTS:        cfg.Environment == "production",
+			MaxInFlight: cfg.MaxInFlight,
 		}),
 	)
 

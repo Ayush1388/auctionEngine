@@ -94,6 +94,9 @@ var (
 		"gRPC call latency by method.",
 		[]float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5}, "method")
 
+	Shed = factory.counter("http_requests_shed_total",
+		"Requests rejected with 503 because the instance was at its in-flight limit (load shedding).")
+
 	BreakerState = factory.gaugeVec("circuit_breaker_state",
 		"Circuit breaker state per dependency: 0 closed, 1 half-open, 2 open.", "name")
 )
@@ -167,6 +170,12 @@ const namespace = "auction"
 
 func (f prometheusFactory) counterVec(name, help string, labels ...string) *prometheus.CounterVec {
 	c := prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: namespace, Name: name, Help: help}, labels)
+	f.r.MustRegister(c)
+	return c
+}
+
+func (f prometheusFactory) counter(name, help string) prometheus.Counter {
+	c := prometheus.NewCounter(prometheus.CounterOpts{Namespace: namespace, Name: name, Help: help})
 	f.r.MustRegister(c)
 	return c
 }
