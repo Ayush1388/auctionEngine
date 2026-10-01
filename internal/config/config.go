@@ -71,6 +71,13 @@ type Config struct {
 	KafkaReplication int
 	BidWorkers       int
 
+	// BiddingGRPCAddr makes the API a gateway that calls the separate
+	// bidding service (cmd/biddingsvc) over gRPC (v0.9). Empty means
+	// bidding runs in-process. InternalToken authenticates the gateway to
+	// the service.
+	BiddingGRPCAddr string
+	InternalToken   string
+
 	// RedisURL enables the cache, shared rate limits and trending. Empty
 	// means run without Redis (in-memory limits, no cache, trending from
 	// PostgreSQL). RedisPrefix namespaces every key.
@@ -244,6 +251,8 @@ func Load() (Config, error) {
 		KafkaTopicPrefix:   os.Getenv("KAFKA_TOPIC_PREFIX"),
 		KafkaReplication:   envInt("KAFKA_REPLICATION_FACTOR", 1),
 		BidWorkers:         envIntAllowZero("BID_WORKERS", 1),
+		BiddingGRPCAddr:    os.Getenv("BIDDING_GRPC_ADDR"),
+		InternalToken:      os.Getenv("INTERNAL_TOKEN"),
 		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
 		RateLimitsEnabled:  rateLimits,
 

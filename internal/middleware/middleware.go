@@ -58,6 +58,7 @@ func RequestID(base *slog.Logger) func(http.Handler) http.Handler {
 			w.Header().Set("X-Request-ID", id)
 
 			ctx := logctx.With(r.Context(), base.With("request_id", id))
+			ctx = logctx.WithRequestID(ctx, id)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
