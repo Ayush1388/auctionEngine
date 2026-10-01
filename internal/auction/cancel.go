@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/outbox"
 )
 
 var (
@@ -52,7 +53,15 @@ func (s *Service) Cancel(
 		}
 
 		cancelled, err = repo.GetByID(ctx, id)
-		return err
+		if err != nil {
+			return err
+		}
+
+		return outbox.Enqueue(ctx, tx, EventTypeCancelled, StatusChangedEvent{
+			AuctionID: id,
+			Status:    StatusCancelled,
+			ChangedAt: s.now().UTC(),
+		})
 	})
 	if err != nil {
 		return Auction{}, err

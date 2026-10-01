@@ -12,16 +12,21 @@ func (f HandlerFunc) Handle(ctx context.Context, event Event) error {
 	return f(ctx, event)
 }
 
-// Router sends each event to the handler registered for its type, so the
-// worker can serve several packages (email, auctions, ...) at once.
+// Router sends each event to every handler registered for its type (fan-out),
+// so one event can feed several consumers: bid.placed invalidates the cache,
+// updates trending scores and (v0.7) is broadcast over WebSockets.
+//
+// If any handler fails, the whole event is retried, including handlers that
+// already succeeded. Every handler must therefore be idempotent: running it
+// twice for the same event must have the same effect as running it once.
 type Router struct {
-	handlers map[string]Handler
+	handlers map[string][]Handler
 	redact   map[string][]string
 }
 
 func NewRouter() *Router {
 	return &Router{
-		handlers: map[string]Handler{},
+		handlers: map[string][]Handler{},
 		redact:   map[string][]string{},
 	}
 }
@@ -47,13 +52,9 @@ func (r *Router) RedactKeys(eventType string) []string {
 	return r.redact[eventType]
 }
 
-// Register sets the handler for eventType. Registering a type twice is a
-// wiring bug, so it panics at startup rather than failing later.
+// Register adds a handler for eventType. Handlers run in registration order.
 func (r *Router) Register(eventType string, h Handler, opts ...Option) {
-	if _, exists := r.handlers[eventType]; exists {
-		panic(fmt.Sprintf("outbox: handler for %q registered twice", eventType))
-	}
-	r.handlers[eventType] = h
+	r.handlers[eventType] = append(r.handlers[eventType], h)
 
 	for _, opt := range opts {
 		opt(r, eventType)
@@ -61,9 +62,14 @@ func (r *Router) Register(eventType string, h Handler, opts ...Option) {
 }
 
 func (r *Router) Handle(ctx context.Context, event Event) error {
-	h, ok := r.handlers[event.EventType]
+	handlers, ok := r.handlers[event.EventType]
 	if !ok {
 		return fmt.Errorf("no handler registered for outbox event type %q", event.EventType)
 	}
-	return h.Handle(ctx, event)
+	for _, h := range handlers {
+		if err := h.Handle(ctx, event); err != nil {
+			return err
+		}
+	}
+	return nil
 }

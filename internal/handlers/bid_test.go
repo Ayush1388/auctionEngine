@@ -109,3 +109,29 @@ func TestPlaceBidHTTP(t *testing.T) {
 		t.Fatalf("unknown auction: %d", w.Code)
 	}
 }
+
+func TestTrendingHTTP(t *testing.T) {
+	a := newAPI(t)
+	_, sellerToken := a.newUser()
+	_, bidderToken := a.newUser()
+	a.requestWithHeader("POST", "/v1/wallet/deposits", bidderToken, `{"amount": 100000000}`, "Idempotency-Key", "seed")
+
+	quiet := a.activeAuction(sellerToken)
+	busy := a.activeAuction(sellerToken)
+	a.request("POST", "/v1/auctions/"+quiet+"/bids", bidderToken, `{"amount": 50000}`)
+	for i, amount := range []string{"50000", "60000", "70000"} {
+		if w, body := a.request("POST", "/v1/auctions/"+busy+"/bids", bidderToken, `{"amount": `+amount+`}`); w.Code != 201 {
+			t.Fatalf("bid %d: %d %v", i, w.Code, body)
+		}
+	}
+
+	w, body := a.request("GET", "/v1/auctions/trending?limit=5", "", "")
+	list, _ := body["auctions"].([]any)
+	if w.Code != 200 || len(list) != 2 || list[0].(map[string]any)["id"] != busy {
+		t.Fatalf("trending: %d %v", w.Code, body)
+	}
+
+	if w, _ := a.request("GET", "/v1/auctions/trending?limit=0", "", ""); w.Code != 400 {
+		t.Fatalf("bad limit: %d", w.Code)
+	}
+}

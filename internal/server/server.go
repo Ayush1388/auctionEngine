@@ -103,6 +103,7 @@ func routes(d Deps) []Route {
 		// Auctions
 		{"POST", "/v1/auctions", protected(d.Auctions.Create)},
 		{"GET", "/v1/auctions", optional(d.Auctions.List)},
+		{"GET", "/v1/auctions/trending", http.HandlerFunc(d.Auctions.Trending)},
 		{"GET", "/v1/auctions/{id}", http.HandlerFunc(d.Auctions.Get)},
 		{"POST", "/v1/auctions/{id}/cancel", protected(d.Auctions.Cancel)},
 

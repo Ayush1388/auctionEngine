@@ -56,6 +56,12 @@ type Config struct {
 
 	// RateLimitsEnabled can be switched off for load testing.
 	RateLimitsEnabled bool
+
+	// RedisURL enables the cache, shared rate limits and trending. Empty
+	// means run without Redis (in-memory limits, no cache, trending from
+	// PostgreSQL). RedisPrefix namespaces every key.
+	RedisURL    string
+	RedisPrefix string
 }
 
 func Load() (Config, error) {
@@ -215,7 +221,17 @@ func Load() (Config, error) {
 		CORSAllowedOrigins: splitList(os.Getenv("CORS_ALLOWED_ORIGINS")),
 		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
 		RateLimitsEnabled:  rateLimits,
+
+		RedisURL:    os.Getenv("REDIS_URL"),
+		RedisPrefix: envOr("REDIS_PREFIX", "ae:"),
 	}, nil
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // splitList parses a comma-separated env var, ignoring blanks.
