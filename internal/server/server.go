@@ -120,6 +120,7 @@ func routes(d Deps) []Route {
 		// Bidding: rate limited per user, after authentication.
 		{"POST", "/v1/auctions/{id}/bids", d.Auth.Authenticate(limited(d.Limits.Bids, byUser, http.HandlerFunc(d.Bids.Place)))},
 		{"GET", "/v1/auctions/{id}/bids", http.HandlerFunc(d.Bids.History)},
+		{"GET", "/v1/bid-requests/{id}", protected(d.Bids.Request)},
 
 		// Wallet
 		{"GET", "/v1/wallet", protected(d.Wallets.Get)},

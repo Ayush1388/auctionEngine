@@ -76,6 +76,24 @@ If Redis goes down, the cache reads PostgreSQL, trending is computed from Postgr
 
 See [`docs/decisions/0010`](docs/decisions/0010-search-as-a-read-model.md).
 
+### Kafka: ordered, asynchronous bid processing
+
+`POST /v1/auctions/{id}/bids` with `Prefer: respond-async` returns **202** in milliseconds; the bid is placed by a worker, and the result is at `GET /v1/bid-requests/{id}` (and on the WebSocket feed).
+
+```
+request ─(1 tx: bid_requests + outbox)─► relay ─► Kafka auction-bids (key = auction_id, 12 partitions)
+                                                      │ consumer group "bid-workers"
+                                                      ▼ one worker per partition, records in order
+                                                 bidding.PlaceBid (same rules and locks)
+```
+
+- **Partitioning by auction** gives a total order of bids per auction and parallelism across auctions. A test queues 30 strictly increasing bids on 4 interleaved auctions; any reordering would reject one, and a deliberately broken worker fails it.
+- **At-least-once delivery + idempotent processing:** offsets are committed after the work; redelivered commands reuse the idempotency key, so a duplicate can't bid twice (tested).
+- **Retries in place** keep order on transient errors; **dead-lettering** after 5 attempts keeps one poison message from blocking an auction.
+- `cmd/bidworker` scales workers independently of the API. Every auction event is also streamed to `auction-events`.
+
+See [`docs/decisions/0012`](docs/decisions/0012-kafka-bid-pipeline.md).
+
 ### Live updates over WebSockets
 
 Connect to `GET /v1/ws`, send `{"action":"subscribe","auction_id":"…"}`, and every bid, extension or status change arrives as a snapshot within milliseconds. Try [`docs/examples/live-auction.html`](docs/examples/live-auction.html).
@@ -182,6 +200,7 @@ Services own transaction boundaries; repositories accept anything that can run a
 | `GET` | `/v1/ws` | | WebSocket: subscribe to live auction updates |
 | `POST` | `/v1/auctions/{id}/bids` | JWT | Place a bid (send an `Idempotency-Key` header) |
 | `GET` | `/v1/auctions/{id}/bids` | | Bid history, newest first |
+| `GET` | `/v1/bid-requests/{id}` | JWT (owner) | Outcome of an async bid (`Prefer: respond-async`) |
 | `GET` | `/v1/wallet` | JWT | Available and reserved balance |
 | `POST` | `/v1/wallet/deposits` | JWT | Add test funds (`Idempotency-Key` required) |
 | `GET` | `/v1/wallet/ledger` | JWT | Every money movement, newest first |
@@ -219,6 +238,7 @@ SMTP_FROM=no-reply@auction.local
 APP_BASE_URL=http://localhost:4000
 REDIS_URL=redis://localhost:6379/0   # optional
 ELASTICSEARCH_URL=http://localhost:9200   # optional
+KAFKA_BROKERS=localhost:9092              # optional; enables async bids
 
 # 3. Run migrations, then the API
 go run ./cmd/migrate
@@ -261,6 +281,9 @@ internal/auctioncache  cache-aside auction reads, singleflight, event invalidati
 internal/trending   hourly sorted-set ranking with Postgres fallback
 internal/search     Elasticsearch + PostgreSQL full-text backends, indexer, reindex
 internal/realtime   WebSocket hub, rooms, heartbeats, backpressure, Redis fan-out
+internal/kafkax     topics, idempotent producer, outbox → Kafka relay
+internal/bidqueue   async bid requests and the consumer-group bid worker
+cmd/bidworker       bid workers without the HTTP API
 api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
@@ -284,6 +307,7 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.5 – Redis** ✅: cache-aside, stampede protection, trending, shared rate limits
 - **v0.6 – Search** ✅: Elasticsearch read model, typo tolerance, autocomplete, PostgreSQL fallback, zero-downtime reindex
 - **v0.7 – Real-time** ✅: WebSocket rooms, heartbeats, backpressure, multi-instance fan-out
-- **Later**: Kafka, gRPC, production hardening
+- **v0.8 – Kafka** ✅: outbox relay, bids partitioned by auction, consumer groups, idempotent consumers, DLQ
+- **Later**: gRPC, production hardening
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).

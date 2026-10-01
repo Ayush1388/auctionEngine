@@ -18,10 +18,12 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/auctioncache"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
+	"github.com/Ayush1388/auctionEngine/internal/bidqueue"
 	"github.com/Ayush1388/auctionEngine/internal/config"
 	"github.com/Ayush1388/auctionEngine/internal/database"
 	"github.com/Ayush1388/auctionEngine/internal/email"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
+	"github.com/Ayush1388/auctionEngine/internal/kafkax"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
 	"github.com/Ayush1388/auctionEngine/internal/realtime"
@@ -198,6 +200,58 @@ func main() {
 	}
 
 	// --------------------------------------------------
+	// Kafka (v0.8, optional)
+	// --------------------------------------------------
+
+	// With Kafka, the outbox relays every auction event into the
+	// auction-events stream, and bids sent with "Prefer: respond-async" are
+	// queued on auction-bids (partitioned by auction) for bid workers.
+	var bidRequests *bidqueue.Requests
+	var startBidWorkers func(ctx context.Context, wg *sync.WaitGroup)
+
+	if len(cfg.KafkaBrokers) > 0 {
+		topics := kafkax.TopicsWithPrefix(cfg.KafkaTopicPrefix)
+
+		producer, err := kafkax.NewProducer(cfg.KafkaBrokers)
+		if err != nil {
+			logger.Error("invalid kafka configuration", "error", err)
+			os.Exit(1)
+		}
+		defer producer.Close()
+
+		topicCtx, cancelTopics := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := kafkax.EnsureTopics(topicCtx, producer, topics, int16(cfg.KafkaReplication)); err != nil {
+			// Not fatal: the relay retries through the outbox until
+			// Kafka is reachable.
+			logger.Warn("kafka unavailable at start-up", "error", err)
+		} else {
+			logger.Info("kafka topics ready", "bids", topics.Bids, "events", topics.Events)
+		}
+		cancelTopics()
+
+		relay := kafkax.NewRelay(producer, topics, bidqueue.EventTypeRequested)
+		outboxRouter.Register(bidqueue.EventTypeRequested, relay.Handler())
+		for _, eventType := range auctionEvents {
+			outboxRouter.Register(eventType, relay.Handler())
+		}
+
+		bidRequests = bidqueue.NewRequests(db)
+
+		startBidWorkers = func(ctx context.Context, wg *sync.WaitGroup) {
+			for i := 0; i < cfg.BidWorkers; i++ {
+				w, err := bidqueue.NewWorker(cfg.KafkaBrokers, "bid-workers", topics.Bids, topics.DLQ,
+					producer, biddingService.PlaceBid, bidRequests, logger)
+				if err != nil {
+					logger.Error("start bid worker", "error", err)
+					continue
+				}
+				wg.Go(func() { w.Run(ctx) })
+			}
+			logger.Info("bid workers started", "count", cfg.BidWorkers)
+		}
+	}
+
+	// --------------------------------------------------
 	// Live updates over WebSocket (v0.7)
 	// --------------------------------------------------
 
@@ -351,7 +405,7 @@ func main() {
 			Search:   handlers.NewSearchHandler(searchService, auctionService),
 			Sessions: handlers.NewSessionHandler(sessionService),
 			Auctions: auctionHandler,
-			Bids:     handlers.NewBidHandler(biddingService),
+			Bids:     handlers.NewBidHandler(biddingService).WithQueue(bidRequests),
 			Wallets:  handlers.NewWalletHandler(walletService),
 			Admin:    handlers.NewAdminHandler(walletService, outboxRepository),
 
@@ -402,6 +456,10 @@ func main() {
 		workers.Go(func() {
 			fanout.Run(workersCtx)
 		})
+	}
+
+	if startBidWorkers != nil {
+		startBidWorkers(workersCtx, &workers)
 	}
 
 	// http.Server.Shutdown ignores hijacked (WebSocket) connections, so

@@ -62,6 +62,15 @@ type Config struct {
 	// than degrading everyone already connected.
 	WSMaxConnections int
 
+	// KafkaBrokers enables asynchronous bids and the event stream (v0.8),
+	// e.g. "localhost:9092". KafkaTopicPrefix namespaces topics.
+	// BidWorkers is how many bid-worker consumers this process runs
+	// (0 = none; run cmd/bidworker separately instead).
+	KafkaBrokers     []string
+	KafkaTopicPrefix string
+	KafkaReplication int
+	BidWorkers       int
+
 	// RedisURL enables the cache, shared rate limits and trending. Empty
 	// means run without Redis (in-memory limits, no cache, trending from
 	// PostgreSQL). RedisPrefix namespaces every key.
@@ -231,6 +240,10 @@ func Load() (Config, error) {
 		RefreshTokenTTL:    refreshTTL,
 		CORSAllowedOrigins: splitList(os.Getenv("CORS_ALLOWED_ORIGINS")),
 		WSMaxConnections:   envInt("WS_MAX_CONNECTIONS", 10000),
+		KafkaBrokers:       splitList(os.Getenv("KAFKA_BROKERS")),
+		KafkaTopicPrefix:   os.Getenv("KAFKA_TOPIC_PREFIX"),
+		KafkaReplication:   envInt("KAFKA_REPLICATION_FACTOR", 1),
+		BidWorkers:         envIntAllowZero("BID_WORKERS", 1),
 		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
 		RateLimitsEnabled:  rateLimits,
 
@@ -240,6 +253,13 @@ func Load() (Config, error) {
 		ElasticsearchURL:   os.Getenv("ELASTICSEARCH_URL"),
 		ElasticsearchIndex: envOr("ELASTICSEARCH_INDEX", "auctions"),
 	}, nil
+}
+
+func envIntAllowZero(key string, fallback int) int {
+	if n, err := strconv.Atoi(os.Getenv(key)); err == nil && n >= 0 {
+		return n
+	}
+	return fallback
 }
 
 func envInt(key string, fallback int) int {

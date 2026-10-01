@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
+	"github.com/Ayush1388/auctionEngine/internal/bidqueue"
 	"github.com/Ayush1388/auctionEngine/internal/httpx"
 	"github.com/Ayush1388/auctionEngine/internal/validation"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
@@ -17,6 +19,16 @@ import (
 
 type BidHandler struct {
 	service *bidding.Service
+
+	// queue enables asynchronous bids through Kafka (v0.8). nil means every
+	// bid is placed synchronously, even if the client asks for async.
+	queue *bidqueue.Requests
+}
+
+// WithQueue enables "Prefer: respond-async" bids.
+func (h *BidHandler) WithQueue(q *bidqueue.Requests) *BidHandler {
+	h.queue = q
+	return h
 }
 
 func NewBidHandler(service *bidding.Service) *BidHandler {
@@ -88,6 +100,13 @@ func (h *BidHandler) Place(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// RFC 7240: a client that can handle a 202 says so with
+	// "Prefer: respond-async". Others keep getting the synchronous answer.
+	if h.queue != nil && strings.Contains(strings.ToLower(r.Header.Get("Prefer")), "respond-async") {
+		h.placeAsync(w, r, auctionID, userID, req.Amount)
+		return
+	}
+
 	res, err := h.service.PlaceBid(r.Context(), bidding.PlaceBidInput{
 		AuctionID:      auctionID,
 		UserID:         userID,
@@ -130,6 +149,90 @@ func (h *BidHandler) Place(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, bidding.ErrContention):
 		w.Header().Set("Retry-After", "1")
 		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
+	default:
+		httpx.ServerError(w, r, err)
+	}
+}
+
+type bidRequestResponse struct {
+	ID            string     `json:"id"`
+	AuctionID     string     `json:"auction_id"`
+	Amount        int64      `json:"amount"`
+	Status        string     `json:"status"`
+	Reason        *string    `json:"reason,omitempty"`
+	BidID         *string    `json:"bid_id,omitempty"`
+	MinimumAmount *int64     `json:"minimum_amount,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
+	StatusURL     string     `json:"status_url"`
+}
+
+func toBidRequestResponse(q bidqueue.Request) bidRequestResponse {
+	resp := bidRequestResponse{
+		ID:            q.ID.String(),
+		AuctionID:     q.AuctionID.String(),
+		Amount:        q.Amount,
+		Status:        string(q.Status),
+		Reason:        q.Reason,
+		MinimumAmount: q.MinimumAmount,
+		CreatedAt:     q.CreatedAt.UTC(),
+		ProcessedAt:   q.ProcessedAt,
+		StatusURL:     "/v1/bid-requests/" + q.ID.String(),
+	}
+	if q.BidID != nil {
+		s := q.BidID.String()
+		resp.BidID = &s
+	}
+	return resp
+}
+
+// placeAsync queues the bid and answers 202 immediately. Final validation
+// (auction open, amount high enough, funds) happens in the bid worker, so
+// a queued bid can still end up REJECTED; poll status_url or watch the
+// auction's WebSocket feed.
+func (h *BidHandler) placeAsync(w http.ResponseWriter, r *http.Request, auctionID, userID uuid.UUID, amount int64) {
+	q, replayed, err := h.queue.Submit(r.Context(), auctionID, userID, amount, r.Header.Get("Idempotency-Key"))
+	switch {
+	case err == nil:
+		w.Header().Set("Location", "/v1/bid-requests/"+q.ID.String())
+		status := http.StatusAccepted
+		if replayed {
+			status = http.StatusOK
+		}
+		httpx.WriteJSON(w, status, toBidRequestResponse(q))
+	case errors.Is(err, bidqueue.ErrInvalidAmount):
+		httpx.Error(w, http.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, bidqueue.ErrAuctionNotFound):
+		httpx.Error(w, http.StatusNotFound, "auction not found")
+	default:
+		httpx.ServerError(w, r, err)
+	}
+}
+
+// Request handles GET /v1/bid-requests/{id}: the outcome of an async bid.
+// Only its owner can see it.
+func (h *BidHandler) Request(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid bid request id")
+		return
+	}
+	if h.queue == nil {
+		httpx.Error(w, http.StatusNotFound, "bid request not found")
+		return
+	}
+
+	q, err := h.queue.Get(r.Context(), id, userID)
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusOK, toBidRequestResponse(q))
+	case errors.Is(err, bidqueue.ErrNotFound):
+		httpx.Error(w, http.StatusNotFound, "bid request not found")
 	default:
 		httpx.ServerError(w, r, err)
 	}
