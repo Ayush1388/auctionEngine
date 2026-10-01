@@ -24,6 +24,8 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/bidqueue"
 	"github.com/Ayush1388/auctionEngine/internal/kafkax"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry/telemetrytest"
 	"github.com/Ayush1388/auctionEngine/internal/testdb"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
@@ -479,4 +481,38 @@ func deref(s *string) string {
 		return ""
 	}
 	return fmt.Sprint(*s)
+}
+
+// The async path crosses two asynchronous boundaries: the outbox table and
+// Kafka. The trace survives both, because its context is stored on the
+// outbox row and then carried in the Kafka record headers:
+//
+//	request span ─► outbox bid.requested ─► kafka process bid command ─► bidding.PlaceBid
+func TestTraceSurvivesOutboxAndKafka(t *testing.T) {
+	rec := telemetrytest.Record(t)
+	w := newWorld(t)
+	a := w.activeAuction()
+	bidder := w.user(10_000)
+
+	ctx, root := telemetry.Tracer().Start(context.Background(), "POST /v1/auctions/{id}/bids")
+	req, _, err := w.requests.Submit(ctx, a, bidder, 500, "")
+	root.End()
+	if err != nil {
+		t.Fatal(err)
+	}
+	traceID := root.SpanContext().TraceID()
+
+	w.drainOutbox()
+	w.startWorkers(1, nil)
+	w.waitProcessed([]uuid.UUID{req.ID})
+
+	for _, name := range []string{"outbox " + bidqueue.EventTypeRequested, "kafka process bid command", "bidding.PlaceBid"} {
+		spans := telemetrytest.Find(rec, name)
+		if len(spans) == 0 {
+			t.Fatalf("no %q span", name)
+		}
+		if got := spans[0].SpanContext().TraceID(); got != traceID {
+			t.Errorf("%q is in trace %s, want the request's trace %s", name, got, traceID)
+		}
+	}
 }

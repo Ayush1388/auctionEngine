@@ -163,6 +163,13 @@ A background worker activates and completes auctions on schedule. It claims batc
 - Integrity enforced in the schema itself: `CHECK (available_amount >= 0)` on wallets, `CHECK (ends_at > starts_at)` on auctions, status enums and foreign keys throughout
 - Tables: `users`, `wallets`, `items`, `auctions`, `bids`, `bid_reservations`, `wallet_transactions`, `outbox_events`
 
+### Observability
+
+- **Prometheus metrics** on an internal admin port (`ADMIN_ADDR`): RED metrics per route and gRPC method, bid outcomes and latency, outbox backlog and dead letters, Kafka consumer lag, DB pool saturation, cache hit ratio, WebSocket connections and slow-client drops. Labels are bounded (route patterns, never raw paths)
+- **Distributed tracing** with OpenTelemetry: one trace follows a bid from the HTTP request through gRPC, SQL, the outbox table and Kafka to the bid worker. The W3C `traceparent` is carried in headers, metadata, the outbox row and record headers. `trace_id` appears in every log line
+- **Probes**: `/livez` (process up) and `/readyz` (critical dependencies reachable, not draining). On SIGTERM the instance **drains** (readiness 503, keep serving for `DRAIN_DELAY`) before closing, so deploys drop no requests
+- **pprof** on the admin port for CPU, heap and goroutine profiles of a live process
+
 ### Operations
 
 - Structured **JSON logging** with `log/slog`
@@ -252,6 +259,9 @@ ELASTICSEARCH_URL=http://localhost:9200   # optional
 KAFKA_BROKERS=localhost:9092              # optional; enables async bids
 BIDDING_GRPC_ADDR=localhost:50051         # optional; call cmd/biddingsvc over gRPC
 INTERNAL_TOKEN=change-me-too              # shared secret between gateway and services
+ADMIN_ADDR=:9090                          # optional; /metrics and pprof (keep internal)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # optional; send traces to Jaeger
+DRAIN_DELAY=5s                            # optional; drain time on SIGTERM (0 locally)
 
 # 3. Run migrations, then the API
 go run ./cmd/migrate
@@ -302,6 +312,9 @@ api/proto/          protobuf contracts; generated code in internal/gen (make pro
 internal/grpcsvc    gRPC server, client, interceptors, error mapping
 tools/protogen      pure-Go protoc replacement used by make proto
 api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
+internal/metrics    Prometheus metrics, RED middleware, pool/backlog collectors
+internal/telemetry  OpenTelemetry setup, HTTP middleware, pgx tracer, propagation
+internal/health     /livez, /readyz and draining
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
 internal/database   pgx pool, DBTX interface, WithTx
@@ -326,6 +339,6 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.7 – Real-time** ✅: WebSocket rooms, heartbeats, backpressure, multi-instance fan-out
 - **v0.8 – Kafka** ✅: outbox relay, bids partitioned by auction, consumer groups, idempotent consumers, DLQ
 - **v0.9 – gRPC** ✅: bidding service, streaming, deadlines, interceptors, error details, safe retries
-- **Later**: production hardening
+- **v1.0 – Production** 🚧: observability (metrics, tracing, probes, pprof) ✅, resilience and load testing, containerised deployment
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).

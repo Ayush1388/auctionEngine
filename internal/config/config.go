@@ -89,6 +89,16 @@ type Config struct {
 	// alias that reads and writes go through.
 	ElasticsearchURL   string
 	ElasticsearchIndex string
+
+	// AdminAddr is the internal listener for /metrics and pprof (v1.0),
+	// e.g. ":9090". Empty disables it. Never expose it publicly.
+	AdminAddr string
+
+	// DrainDelay is how long to keep serving after SIGTERM with /readyz
+	// already answering 503, so the load balancer stops routing here before
+	// the listener closes (v1.0). Set it a little above the readiness probe
+	// period in Kubernetes; 0 for local runs.
+	DrainDelay time.Duration
 }
 
 func Load() (Config, error) {
@@ -225,6 +235,11 @@ func Load() (Config, error) {
 		)
 	}
 
+	drainDelay, err := envDuration("DRAIN_DELAY", 0)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port:        port,
 		Environment: environment,
@@ -261,7 +276,22 @@ func Load() (Config, error) {
 
 		ElasticsearchURL:   os.Getenv("ELASTICSEARCH_URL"),
 		ElasticsearchIndex: envOr("ELASTICSEARCH_INDEX", "auctions"),
+
+		AdminAddr:  os.Getenv("ADMIN_ADDR"),
+		DrainDelay: drainDelay,
 	}, nil
+}
+
+func envDuration(key string, fallback time.Duration) (time.Duration, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("%s must be a non-negative duration like 5s", key)
+	}
+	return d, nil
 }
 
 func envIntAllowZero(key string, fallback int) int {

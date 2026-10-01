@@ -24,7 +24,9 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/email"
 	"github.com/Ayush1388/auctionEngine/internal/grpcsvc"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
+	"github.com/Ayush1388/auctionEngine/internal/health"
 	"github.com/Ayush1388/auctionEngine/internal/kafkax"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
 	"github.com/Ayush1388/auctionEngine/internal/realtime"
@@ -32,6 +34,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/search"
 	"github.com/Ayush1388/auctionEngine/internal/server"
 	"github.com/Ayush1388/auctionEngine/internal/session"
+	"github.com/Ayush1388/auctionEngine/internal/telemetry"
 	"github.com/Ayush1388/auctionEngine/internal/trending"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
@@ -83,6 +86,26 @@ func main() {
 		cfg.Port,
 	)
 
+	// --------------------------------------------------
+	// Observability (v1.0)
+	// --------------------------------------------------
+
+	// Tracing: a no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set. The
+	// returned function flushes buffered spans; it runs last on exit.
+	shutdownTracing, err := telemetry.Setup(context.Background(), "auction-api")
+	if err != nil {
+		logger.Error("failed to set up tracing", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracing(ctx)
+	}()
+
+	// Readiness checks are added as each dependency is built below.
+	checker := health.New()
+
 	db, err := database.NewPostgresPool(
 		cfg.DatabaseURL,
 	)
@@ -97,6 +120,11 @@ func main() {
 	defer db.Close()
 
 	logger.Info("connected to PostgreSQL")
+
+	// PostgreSQL is the only CRITICAL dependency: without it nothing works,
+	// so the instance leaves the load balancer. Everything else degrades.
+	checker.Add("postgres", true, db.Ping)
+	metrics.RegisterPool(db)
 
 	// --------------------------------------------------
 	// Redis (optional)
@@ -121,6 +149,7 @@ func main() {
 			logger.Info("connected to Redis")
 		}
 		defer rdb.Close()
+		checker.Add("redis", false, func(ctx context.Context) error { return rdb.Ping(ctx).Err() })
 	}
 
 	// Auctions are needed early: the cache and trending wrap their reads.
@@ -237,6 +266,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer producer.Close()
+		checker.Add("kafka", false, producer.Ping)
 
 		topicCtx, cancelTopics := context.WithTimeout(context.Background(), 15*time.Second)
 		if err := kafkax.EnsureTopics(topicCtx, producer, topics, int16(cfg.KafkaReplication)); err != nil {
@@ -275,6 +305,22 @@ func main() {
 	// --------------------------------------------------
 
 	hub := realtime.NewHub(cfg.WSMaxConnections)
+	metrics.GaugeFunc("ws_connections", "Open WebSocket connections on this instance.", func() float64 {
+		clients, _ := hub.Stats()
+		return float64(clients)
+	})
+	metrics.GaugeFunc("ws_rooms", "Auctions with at least one watcher on this instance.", func() float64 {
+		_, rooms := hub.Stats()
+		return float64(rooms)
+	})
+	metrics.CounterFunc("ws_messages_delivered_total", "Messages queued to WebSocket clients.", func() float64 {
+		delivered, _ := hub.Counters()
+		return float64(delivered)
+	})
+	metrics.CounterFunc("ws_slow_clients_dropped_total", "Clients disconnected because they could not keep up.", func() float64 {
+		_, dropped := hub.Counters()
+		return float64(dropped)
+	})
 
 	// With Redis, updates fan out to every instance's hub; without it,
 	// there is only one instance and the local hub is enough.
@@ -297,6 +343,7 @@ func main() {
 	var primarySearch search.Backend
 	if cfg.ElasticsearchURL != "" {
 		elastic := search.NewElastic(cfg.ElasticsearchURL, cfg.ElasticsearchIndex)
+		checker.Add("elasticsearch", false, elastic.Ping)
 
 		ensureCtx, cancelEnsure := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := elastic.EnsureIndex(ensureCtx); err != nil {
@@ -322,6 +369,11 @@ func main() {
 
 	if rdb != nil {
 		auctionCache = auctioncache.New(rdb, cfg.RedisPrefix, auctionService.Get)
+		// Hit ratio = hits / (hits + misses): the number that says whether
+		// the cache is worth having.
+		metrics.CounterFunc("cache_hits_total", "Auction cache hits.", func() float64 { return float64(auctionCache.Stats().Hits) })
+		metrics.CounterFunc("cache_misses_total", "Auction cache misses.", func() float64 { return float64(auctionCache.Stats().Misses) })
+		metrics.CounterFunc("cache_loads_total", "Database loads after a miss (singleflight collapses concurrent misses).", func() float64 { return float64(auctionCache.Stats().Loads) })
 
 		// Any change to an auction drops its cache entry.
 		for _, eventType := range auctionEvents {
@@ -332,6 +384,25 @@ func main() {
 		outboxRouter.Register(bidding.EventTypePlaced, redisRanker.Handler())
 		ranker = redisRanker
 	}
+
+	// Outbox backlog, read at scrape time with a short timeout so a slow
+	// database can't stall a scrape.
+	backlog := func(failed bool) func() float64 {
+		return func() float64 {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			p, f, err := outboxRepository.Backlog(ctx)
+			if err != nil {
+				return -1
+			}
+			if failed {
+				return float64(f)
+			}
+			return float64(p)
+		}
+	}
+	metrics.GaugeFunc("outbox_pending", "Outbox events waiting to be delivered.", backlog(false))
+	metrics.GaugeFunc("outbox_dead_lettered", "Outbox events parked after exhausting retries.", backlog(true))
 
 	outboxWorker := outbox.NewWorker(
 		outboxRepository,
@@ -429,6 +500,7 @@ func main() {
 			Admin:    handlers.NewAdminHandler(walletService, outboxRepository),
 
 			Auth:     authMiddleware,
+			Health:   checker,
 			Limiter:  limiter,
 			ClientIP: clientIP,
 			Limits:   server.DefaultLimits(),
@@ -489,6 +561,8 @@ func main() {
 	// Start HTTP server
 	// --------------------------------------------------
 
+	stopAdmin := server.StartAdmin(cfg.AdminAddr, checker, logger)
+
 	serverErrors := make(chan error, 1)
 
 	go func() {
@@ -536,11 +610,24 @@ func main() {
 		)
 	}
 
+	// Drain: /readyz now answers 503, so the load balancer stops sending
+	// new requests here. Keep serving for DrainDelay while it notices, and
+	// only then close the listener.
+	checker.Drain()
+	if cfg.DrainDelay > 0 && exitCode == 0 {
+		logger.Info("draining before shutdown", "delay", cfg.DrainDelay.String())
+		time.Sleep(cfg.DrainDelay)
+	}
+
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		shutdownTimeout,
 	)
 	defer cancel()
+
+	// The admin listener stops last, so metrics stay scrapeable while the
+	// rest of the process drains.
+	defer stopAdmin(ctx)
 
 	if err := shutdown(ctx, srv, stopWorkers, &workers); err != nil {
 		logger.Error(

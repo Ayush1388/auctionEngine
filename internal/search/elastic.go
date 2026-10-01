@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -354,4 +355,25 @@ func redactURL(p string) string {
 		return u.Path
 	}
 	return p
+}
+
+// Ping checks the cluster is reachable and not red (readiness, v1.0).
+func (e *Elastic) Ping(ctx context.Context) error {
+	code, body, err := e.do(ctx, http.MethodGet, "/_cluster/health", nil)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK {
+		return fmt.Errorf("elasticsearch health: status %d", code)
+	}
+	var h struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &h); err != nil {
+		return err
+	}
+	if h.Status == "red" {
+		return errors.New("elasticsearch cluster is red")
+	}
+	return nil
 }
