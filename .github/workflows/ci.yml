@@ -83,5 +83,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # The committed gRPC code must match api/proto. Regenerate it and fail
+      # if anything changed (someone edited the .proto and forgot `make proto`).
+      - name: Generated code is up to date
+        run: |
+          make proto USE_PROTOGEN=1 GOBIN="$(go env GOPATH)/bin"
+          git diff --exit-code -- internal/gen
+
       - name: Test
         run: go test -race -count=1 ./...

@@ -1,0 +1,96 @@
+// The contract between the API gateway and the bidding service (v0.9).
+//
+// Regenerate the Go code after editing:
+//
+//	make proto
+//
+// which needs protoc-gen-go and protoc-gen-go-grpc on PATH and uses either
+// protoc or, if protoc isn't installed, the pure-Go tools/protogen.
+//
+// Compatibility rules for changing this file (protobuf wire format):
+//   - never change or reuse a field NUMBER; numbers are what's on the wire
+//   - add new fields with new numbers; old clients just ignore them
+//   - to remove a field, delete it and add "reserved <number>;"
+syntax = "proto3";
+
+package auctionengine.bidding.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/Ayush1388/auctionEngine/internal/gen/biddingv1;biddingv1";
+
+// BiddingService owns placing bids and reading bid history.
+//
+// Errors use standard gRPC status codes. Business rule failures are
+// FAILED_PRECONDITION with a google.rpc.ErrorInfo detail whose "reason" is
+// one of: AUCTION_NOT_ACTIVE, AUCTION_ENDED, BID_TOO_LOW (metadata
+// "minimum_amount"), INSUFFICIENT_FUNDS, IDEMPOTENCY_MISMATCH.
+service BiddingService {
+  // PlaceBid places one bid. With an idempotency_key it is safe to retry:
+  // a repeat returns the original bid with replayed = true.
+  rpc PlaceBid(PlaceBidRequest) returns (PlaceBidResponse);
+
+  // ListBids returns an auction's bids, newest first.
+  rpc ListBids(ListBidsRequest) returns (ListBidsResponse);
+
+  // WatchAuction streams a snapshot every time the auction changes, until
+  // the client cancels. Server-side streaming: one request, many responses.
+  rpc WatchAuction(WatchAuctionRequest) returns (stream AuctionSnapshot);
+}
+
+message PlaceBidRequest {
+  string auction_id = 1;
+  string user_id = 2;
+  int64 amount = 3;
+  string idempotency_key = 4;
+}
+
+message Bid {
+  string id = 1;
+  string auction_id = 2;
+  string user_id = 3;
+  int64 amount = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message PlaceBidResponse {
+  Bid bid = 1;
+  int64 current_bid = 2;
+  int32 bid_count = 3;
+  google.protobuf.Timestamp ends_at = 4;
+  bool extended = 5;
+  bool replayed = 6;
+}
+
+message ListBidsRequest {
+  string auction_id = 1;
+  // Strings, not ints, so the service validates exactly what the HTTP
+  // client sent and reports the same field errors.
+  string limit = 2;
+  string cursor = 3;
+}
+
+message ListBidsResponse {
+  repeated Bid bids = 1;
+  // Empty on the last page.
+  string next_cursor = 2;
+}
+
+message WatchAuctionRequest {
+  string auction_id = 1;
+}
+
+message AuctionSnapshot {
+  string id = 1;
+  string status = 2;
+  optional int64 current_bid = 3;
+  optional string current_bidder_id = 4;
+  int32 bid_count = 5;
+  int64 min_next_bid = 6;
+  google.protobuf.Timestamp ends_at = 7;
+  int32 extensions = 8;
+  // Apply a snapshot only if its version is higher than the last one seen.
+  int64 version = 9;
+  // The event that caused this snapshot, e.g. "bid.placed".
+  string cause = 10;
+}

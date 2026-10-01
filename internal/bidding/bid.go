@@ -53,6 +53,11 @@ var (
 	// ErrContention is returned by the optimistic strategy when it lost
 	// the race too many times in a row. The client should retry.
 	ErrContention = errors.New("auction is busy, please retry")
+
+	// ErrUnavailable means bidding couldn't be reached at all (v0.9: the
+	// bidding service is down, overloaded, or didn't answer in time).
+	// Retrying later is appropriate.
+	ErrUnavailable = errors.New("bidding is temporarily unavailable, please retry")
 )
 
 // BidTooLowError says what the minimum acceptable bid was, so the client

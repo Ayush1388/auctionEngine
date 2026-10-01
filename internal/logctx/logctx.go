@@ -13,6 +13,20 @@ import (
 
 type key struct{}
 
+type requestIDKey struct{}
+
+// WithRequestID stores the request ID so it can be forwarded to other
+// services (gRPC metadata) and attached to traces.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, requestIDKey{}, id)
+}
+
+// RequestID returns the ID stored by WithRequestID, or "".
+func RequestID(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDKey{}).(string)
+	return id
+}
+
 // With returns ctx carrying logger.
 func With(ctx context.Context, logger *slog.Logger) context.Context {
 	return context.WithValue(ctx, key{}, logger)

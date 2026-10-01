@@ -37,6 +37,7 @@
 package realtime
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -160,4 +161,43 @@ func (h *Hub) Stats() (clients, rooms int) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients), len(h.rooms)
+}
+
+// Watch subscribes to one auction without a WebSocket: messages arrive on
+// the returned channel until ctx ends. The gRPC WatchAuction stream (v0.9)
+// uses it, so gRPC and WebSocket watchers share the same rooms and fan-out.
+//
+// Same backpressure rule as sockets: if the consumer falls behind by more
+// than buffer messages, the watch is ended (the channel is closed).
+func (h *Hub) Watch(ctx context.Context, auctionID uuid.UUID, buffer int) (<-chan []byte, bool) {
+	c := &client{
+		send:  make(chan []byte, buffer),
+		rooms: map[uuid.UUID]struct{}{},
+		gone:  make(chan struct{}),
+	}
+	if !h.register(c) {
+		return nil, false
+	}
+	h.join(c, auctionID)
+
+	out := make(chan []byte)
+	go func() {
+		defer close(out)
+		defer h.unregister(c)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-c.gone:
+				return
+			case msg := <-c.send:
+				select {
+				case out <- msg:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return out, true
 }

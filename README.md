@@ -76,6 +76,17 @@ If Redis goes down, the cache reads PostgreSQL, trending is computed from Postgr
 
 See [`docs/decisions/0010`](docs/decisions/0010-search-as-a-read-model.md).
 
+### gRPC: bidding as its own service
+
+`cmd/biddingsvc` serves `BiddingService` (`api/proto/bidding/v1/bidding.proto`): `PlaceBid`, `ListBids`, and the server-streaming `WatchAuction`. With `BIDDING_GRPC_ADDR` set, the API becomes a gateway that calls it.
+
+- The HTTP handlers depend on a `Bidder` interface, so the in-process service and the gRPC client are interchangeable, with no handler changes.
+- Domain errors survive the network as gRPC codes with `ErrorInfo`/`BadRequest` details and come back as the same Go errors; an unreachable service becomes a **503**.
+- **Deadlines propagate** into PostgreSQL: when the caller gives up, the query is cancelled (tested with a held row lock).
+- **Retries are safe** because every call carries an idempotency key. Service-to-service auth, request-ID propagation, health checks, reflection and graceful stop are included.
+
+What still shares a database, and the path to splitting it, is in [`docs/decisions/0013`](docs/decisions/0013-bidding-service-over-grpc.md).
+
 ### Kafka: ordered, asynchronous bid processing
 
 `POST /v1/auctions/{id}/bids` with `Prefer: respond-async` returns **202** in milliseconds; the bid is placed by a worker, and the result is at `GET /v1/bid-requests/{id}` (and on the WebSocket feed).
@@ -239,6 +250,8 @@ APP_BASE_URL=http://localhost:4000
 REDIS_URL=redis://localhost:6379/0   # optional
 ELASTICSEARCH_URL=http://localhost:9200   # optional
 KAFKA_BROKERS=localhost:9092              # optional; enables async bids
+BIDDING_GRPC_ADDR=localhost:50051         # optional; call cmd/biddingsvc over gRPC
+INTERNAL_TOKEN=change-me-too              # shared secret between gateway and services
 
 # 3. Run migrations, then the API
 go run ./cmd/migrate
@@ -284,6 +297,10 @@ internal/realtime   WebSocket hub, rooms, heartbeats, backpressure, Redis fan-ou
 internal/kafkax     topics, idempotent producer, outbox → Kafka relay
 internal/bidqueue   async bid requests and the consumer-group bid worker
 cmd/bidworker       bid workers without the HTTP API
+cmd/biddingsvc      the bidding service (gRPC)
+api/proto/          protobuf contracts; generated code in internal/gen (make proto)
+internal/grpcsvc    gRPC server, client, interceptors, error mapping
+tools/protogen      pure-Go protoc replacement used by make proto
 api/                OpenAPI 3.1 document (embedded, served at /v1/openapi.json)
 internal/outbox     outbox repository, worker and event router
 internal/email      SMTP service and outbox event handler
@@ -308,6 +325,7 @@ Work is tracked in [issues](https://github.com/Ayush1388/auctionEngine/issues) a
 - **v0.6 – Search** ✅: Elasticsearch read model, typo tolerance, autocomplete, PostgreSQL fallback, zero-downtime reindex
 - **v0.7 – Real-time** ✅: WebSocket rooms, heartbeats, backpressure, multi-instance fan-out
 - **v0.8 – Kafka** ✅: outbox relay, bids partitioned by auction, consumer groups, idempotent consumers, DLQ
-- **Later**: gRPC, production hardening
+- **v0.9 – gRPC** ✅: bidding service, streaming, deadlines, interceptors, error details, safe retries
+- **Later**: production hardening
 
 Design decisions are recorded in [`docs/decisions/`](docs/decisions/), and the development workflow is in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).

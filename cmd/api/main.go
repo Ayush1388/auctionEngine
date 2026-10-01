@@ -22,6 +22,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/config"
 	"github.com/Ayush1388/auctionEngine/internal/database"
 	"github.com/Ayush1388/auctionEngine/internal/email"
+	"github.com/Ayush1388/auctionEngine/internal/grpcsvc"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
 	"github.com/Ayush1388/auctionEngine/internal/kafkax"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
@@ -197,6 +198,24 @@ func main() {
 				return nil
 			}),
 		)
+	}
+
+	// --------------------------------------------------
+	// Bidding: in-process, or a separate service over gRPC (v0.9)
+	// --------------------------------------------------
+
+	// The handlers only see the handlers.Bidder interface; which
+	// implementation sits behind it is decided here, once.
+	var bidder handlers.Bidder = biddingService
+	if cfg.BiddingGRPCAddr != "" {
+		client, err := grpcsvc.Dial(cfg.BiddingGRPCAddr, cfg.InternalToken)
+		if err != nil {
+			logger.Error("invalid BIDDING_GRPC_ADDR", "error", err)
+			os.Exit(1)
+		}
+		defer client.Close()
+		bidder = client
+		logger.Info("bidding via gRPC", "addr", cfg.BiddingGRPCAddr)
 	}
 
 	// --------------------------------------------------
@@ -405,7 +424,7 @@ func main() {
 			Search:   handlers.NewSearchHandler(searchService, auctionService),
 			Sessions: handlers.NewSessionHandler(sessionService),
 			Auctions: auctionHandler,
-			Bids:     handlers.NewBidHandler(biddingService).WithQueue(bidRequests),
+			Bids:     handlers.NewBidHandler(bidder).WithQueue(bidRequests),
 			Wallets:  handlers.NewWalletHandler(walletService),
 			Admin:    handlers.NewAdminHandler(walletService, outboxRepository),
 
