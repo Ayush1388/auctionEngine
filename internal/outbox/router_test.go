@@ -22,10 +22,10 @@ func TestRouter(t *testing.T) {
 		t.Fatal("expected an error for an unregistered type")
 	}
 
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected a panic when registering a type twice")
-		}
-	}()
-	r.Register("a", HandlerFunc(func(context.Context, Event) error { return nil }))
+	// A second handler for the same type also runs (fan-out).
+	calls := 0
+	r.Register("a", HandlerFunc(func(context.Context, Event) error { calls++; return nil }))
+	if err := r.Handle(context.Background(), Event{EventType: "a"}); err != nil || calls != 1 {
+		t.Fatalf("fan-out: err=%v calls=%d", err, calls)
+	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/server"
 	"github.com/Ayush1388/auctionEngine/internal/session"
 	"github.com/Ayush1388/auctionEngine/internal/testdb"
+	"github.com/Ayush1388/auctionEngine/internal/trending"
 	"github.com/Ayush1388/auctionEngine/internal/user"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
@@ -52,7 +53,7 @@ func newAPI(t *testing.T) *api {
 	a.handler = server.Routes(server.Deps{
 		Users:    handlers.NewUserHandler(user.NewService(pool, user.NewRepository(pool), jwt), sessions, nil),
 		Sessions: handlers.NewSessionHandler(sessions),
-		Auctions: handlers.NewAuctionHandler(auctionService),
+		Auctions: handlers.NewAuctionHandler(auctionService).WithTrending(trending.NewPostgres(pool)),
 		Bids:     handlers.NewBidHandler(biddingService),
 		Wallets:  handlers.NewWalletHandler(wallet.NewService(pool)),
 		Admin:    handlers.NewAdminHandler(wallet.NewService(pool), outbox.NewRepository(pool)),

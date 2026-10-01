@@ -13,5 +13,6 @@ They are written once and rarely edited. If a decision changes, add a new note t
 | [0006](0006-bid-concurrency.md) | Serialising bids with row locks and a global lock order | Accepted |
 | [0007](0007-double-entry-ledger.md) | Double-entry, append-only ledger | Accepted |
 | [0008](0008-access-and-refresh-tokens.md) | Short access tokens, rotating refresh tokens, per-account throttling | Accepted |
+| [0009](0009-redis-as-a-disposable-accelerator.md) | Redis as a disposable accelerator | Accepted |
 
 To add one, copy [`template.md`](template.md) and take the next number.

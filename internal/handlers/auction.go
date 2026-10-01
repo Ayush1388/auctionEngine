@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -10,17 +11,38 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
 	"github.com/Ayush1388/auctionEngine/internal/httpx"
+	"github.com/Ayush1388/auctionEngine/internal/trending"
 	"github.com/Ayush1388/auctionEngine/internal/validation"
 )
 
 type AuctionHandler struct {
 	service *auction.Service
+
+	// get reads one auction. By default it goes straight to the service;
+	// WithCache swaps in the Redis cache-aside reader (v0.5).
+	get func(ctx context.Context, id uuid.UUID) (auction.Auction, error)
+
+	// trending ranks auctions for GET /v1/auctions/trending.
+	trending trending.Ranker
 }
 
 func NewAuctionHandler(service *auction.Service) *AuctionHandler {
 	return &AuctionHandler{
 		service: service,
+		get:     service.Get,
 	}
+}
+
+// WithCache makes single-auction reads go through the cache.
+func (h *AuctionHandler) WithCache(get func(ctx context.Context, id uuid.UUID) (auction.Auction, error)) *AuctionHandler {
+	h.get = get
+	return h
+}
+
+// WithTrending sets the ranker used by Trending.
+func (h *AuctionHandler) WithTrending(r trending.Ranker) *AuctionHandler {
+	h.trending = r
+	return h
 }
 
 type itemResponse struct {
@@ -114,7 +136,7 @@ func (h *AuctionHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, err := h.service.Get(r.Context(), id)
+	found, err := h.get(r.Context(), id)
 	switch {
 	case err == nil:
 		httpx.WriteJSON(w, http.StatusOK, toAuctionResponse(found))
@@ -216,4 +238,43 @@ func (h *AuctionHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	default:
 		httpx.ServerError(w, r, err)
 	}
+}
+
+// Trending handles GET /v1/auctions/trending?limit=: the active auctions
+// with the most bids in the last hour, busiest first.
+func (h *AuctionHandler) Trending(w http.ResponseWriter, r *http.Request) {
+	limit, ok := trending.ParseLimit(r.URL.Query().Get("limit"))
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, "limit must be between 1 and 50")
+		return
+	}
+	if h.trending == nil {
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"auctions": []auctionResponse{}})
+		return
+	}
+
+	ids, err := h.trending.Top(r.Context(), limit)
+	if err != nil {
+		httpx.ServerError(w, r, err)
+		return
+	}
+
+	// Each auction comes from the cache when possible, and ones that have
+	// since ended or vanished are skipped.
+	out := make([]auctionResponse, 0, len(ids))
+	for _, id := range ids {
+		a, err := h.get(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, auction.ErrNotFound) {
+				continue
+			}
+			httpx.ServerError(w, r, err)
+			return
+		}
+		if a.Status == auction.StatusActive {
+			out = append(out, toAuctionResponse(a))
+		}
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"auctions": out})
 }

@@ -16,3 +16,18 @@ type CompletedEvent struct {
 	WinningBid  *int64    `json:"winning_bid"`
 	CompletedAt time.Time `json:"completed_at"`
 }
+
+// EventTypeActivated and EventTypeCancelled are emitted when an auction
+// opens for bidding or is cancelled. Consumers: cache invalidation (v0.5),
+// search indexing (v0.6), live updates (v0.7).
+const (
+	EventTypeActivated = "auction.activated"
+	EventTypeCancelled = "auction.cancelled"
+)
+
+// StatusChangedEvent is the payload of activated and cancelled events.
+type StatusChangedEvent struct {
+	AuctionID uuid.UUID `json:"auction_id"`
+	Status    Status    `json:"status"`
+	ChangedAt time.Time `json:"changed_at"`
+}
