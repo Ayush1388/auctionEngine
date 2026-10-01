@@ -29,6 +29,7 @@ type Deps struct {
 	Bids     *handlers.BidHandler
 	Wallets  *handlers.WalletHandler
 	Admin    *handlers.AdminHandler
+	Search   *handlers.SearchHandler
 
 	Auth *auth.Middleware
 
@@ -104,6 +105,8 @@ func routes(d Deps) []Route {
 		{"POST", "/v1/auctions", protected(d.Auctions.Create)},
 		{"GET", "/v1/auctions", optional(d.Auctions.List)},
 		{"GET", "/v1/auctions/trending", http.HandlerFunc(d.Auctions.Trending)},
+		{"GET", "/v1/auctions/search", http.HandlerFunc(d.Search.Search)},
+		{"GET", "/v1/auctions/suggest", http.HandlerFunc(d.Search.Suggest)},
 		{"GET", "/v1/auctions/{id}", http.HandlerFunc(d.Auctions.Get)},
 		{"POST", "/v1/auctions/{id}/cancel", protected(d.Auctions.Cancel)},
 
