@@ -1,0 +1,222 @@
+@import "tailwindcss";
+@import "@fontsource-variable/fraunces/opsz.css";
+@import "@fontsource-variable/archivo/wdth.css";
+
+/*
+ * Design tokens from plan.md section 5. Components use these names only,
+ * never raw hex values. Paper is the light theme and the default; Carbon is
+ * the dark theme, switched with data-theme="dark" on <html>.
+ */
+@theme {
+  --breakpoint-*: initial;
+  --breakpoint-md: 48rem; /* 768 */
+  --breakpoint-lg: 64rem; /* 1024 */
+  --breakpoint-xl: 90rem; /* 1440 */
+
+  --color-*: initial;
+  --color-bg: var(--bg);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-surface: var(--surface);
+  --color-elevated: var(--surface-elevated);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-action: var(--action);
+  --color-on-action: var(--on-action);
+  --color-live: var(--live);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-stage-dark: #070708;
+  --color-stage-ink: #f2f0eb;
+  --color-transparent: transparent;
+
+  --font-serif: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-sans: "Archivo Variable", Arial, system-ui, sans-serif;
+
+  /* Type scale: 12, 13, 14, 16, 18, 20, 22, 28, 36, 44. Nothing else. */
+  --text-*: initial;
+  --text-12: 0.75rem;
+  --text-13: 0.8125rem;
+  --text-14: 0.875rem;
+  --text-16: 1rem;
+  --text-18: 1.125rem;
+  --text-20: 1.25rem;
+  --text-22: 1.375rem;
+  --text-28: 1.75rem;
+  --text-36: 2.25rem;
+  --text-44: 2.75rem;
+
+  --radius-*: initial;
+  --radius-card: 2px;
+  --radius-control: 4px;
+  --radius-sheet: 8px;
+  --radius-full: 9999px;
+
+  --shadow-*: initial;
+  --shadow-overlay: var(--shadow-overlay-value);
+
+  --ease-enter: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+:root,
+:root[data-theme="light"] {
+  --bg: #f4f3ec;
+  --bg-secondary: #e8e6de;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --text: #14130f;
+  --text-secondary: #45433d;
+  --text-muted: #66635b;
+  --border: #d3d0c6;
+  --border-strong: #7c786d;
+  --action: #14130f;
+  --on-action: #f4f3ec;
+  --live: #ad221d;
+  --success: #1d6a43;
+  --warning: #855400;
+  --card-outline: var(--border);
+  --shadow-overlay-value: 0 8px 24px rgb(20 19 15 / 0.14);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #101113;
+  --bg-secondary: #17191c;
+  --surface: #1c1f23;
+  --surface-elevated: #262a2f;
+  --text: #f2f0eb;
+  --text-secondary: #b8b5ad;
+  --text-muted: #9d9a92;
+  --border: #30343a;
+  --border-strong: #737882;
+  --action: #f2f0eb;
+  --on-action: #101113;
+  --live: #f4665d;
+  --success: #4fc48c;
+  --warning: #e3a63a;
+  --card-outline: transparent;
+  --shadow-overlay-value: 0 8px 24px rgb(0 0 0 / 0.5);
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 100%;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  a,
+  button {
+    touch-action: manipulation;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  /* Lot title, classic voice: catalogue serif, written case. */
+  .title-classic {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-variation-settings: "SOFT" 0, "WONK" 0;
+    letter-spacing: -0.01em;
+  }
+
+  /* Lot title, modern voice: wide uppercase sans, like a badge on the car. */
+  .title-modern {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-stretch: 112%;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+  }
+
+  .heading {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  /* Labels, spec rows, tags: condensed sans, sentence case. */
+  .meta {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-stretch: 88%;
+    line-height: 1.35;
+  }
+
+  /* Bids, countdowns, balances: figures that align in columns. */
+  .figure {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-stretch: 100%;
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  .wordmark {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-stretch: 70%;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    line-height: 1;
+  }
+
+  .skeleton {
+    background: var(--bg-secondary);
+    animation: skeleton-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.fade-in {
+  animation: fade-in 180ms var(--ease-enter);
+}
