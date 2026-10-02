@@ -12,10 +12,10 @@ Rule that settles every disagreement below: **car = emotion, UI = clarity, aucti
 |---|---|---|
 | Repository | Read | `github.com/Ayush1388/auctionEngine`, `main` at v1.0 (commit `96c4e78`). The local checkout in `Desktop/auctionEngine` is older (pre-bidding README, no `api/`), so pull before implementing. |
 | API contract | Read | `api/openapi.json`, plus handlers, bidding rules, realtime hub, config, migrations. |
-| Existing frontend code | Read | None in the repo. Local-only prototypes exist: `aurelian-landing/`, `aurelian-duality/` (Vite 8, React 19, TypeScript, Tailwind 4, GSAP) and `watch/` (react-three-fiber). They are watch-themed showpieces, not an app. Their stack is reused; their tokens `paper #ECEBE7` and `ink #14130F` are carried over. |
+| Existing frontend code | Read | None in the repo. Local-only prototypes exist: `aurelian-landing/`, `aurelian-duality/` (Vite 8, React 19, TypeScript, Tailwind 4, GSAP) and `watch/` (react-three-fiber). They are watch-themed showpieces, not an app. Their stack is reused; their `ink #14130F` is carried over. |
 | `/frontend-design` skill | Read and applied | Subject-grounded choices, one bold element, restraint, copy rules, the list of generated-design tells to avoid. |
 | `/ui-ux-pro-max` skill | Read and applied | Priority table, full quick reference (10 categories), and searches against its database. Results used and results rejected are listed in section 14. |
-| Reference images | **Not received** | No images reached this session, only the written brief. Section 2 extracts principles from the brief's written description of the two reference sets. It must be re-checked against the actual images before implementation; anything in section 2 that the images contradict loses. |
+| Reference images | Received and studied | Six images, labelled A to F in section 2. They arrived after the first version of this plan; section 2.5 lists exactly what they changed. |
 
 ### 0.1 What the backend actually supports
 
@@ -70,35 +70,144 @@ Everything marked **No** is either designed as a clearly labelled future state o
 
 ## 2. Reference analysis
 
-Based on the written description of the references in the brief (see section 0). Each row is a concrete rule, not "use as inspiration".
+Six reference images were studied. They are references for principles, not templates: no layout, logo, wording, brand name or proprietary element from them is reproduced.
 
-### 2.1 Vintage and classic references
-
-| Observation in the brief | Extracted principle | Where it lands |
+| Ref | What it shows | Direction |
 |---|---|---|
-| Warm photography, car as focus | Warm neutral ground with no competing colour. Photo occupies at least 60% of card area and the full first screen of the lot page on desktop. | Paper atmosphere, card 4:3 image |
-| Editorial, collector-magazine typography | A serif with real character for lot titles only. Everything functional stays sans. | Fraunces for titles, Archivo for UI |
-| Cream, ivory, muted red, black | Two neutrals and one accent. Red is spent on state, not on brand flourishes. | Tokens in 5.1 |
-| Nostalgic but not cheesy | No textures, no faux paper grain, no badges or ribbons, no script fonts. Nostalgia comes from the photo and the serif. | 5.8 |
-| Dense but organised listings | Fixed grid, hairline dividers between facts, consistent line order on every card, tabular figures so prices align down a column. | Card spec 4.3 |
-| Category navigation, vehicle cards, status, bid, specs, ending indicators | A horizontal category strip above the grid; status expressed as text plus a dot; the time-remaining figure changes weight and colour as the end approaches. | 4.2, 4.3 |
+| A | A browse page: category tiles with line drawings of cars, a sort select, and a three-column grid of classic-car auction cards on white | Classic |
+| B | A landing screen on cream with a very large red condensed wordmark, small typewriter-style navigation, a countdown, and a wide photo band of a 1950s car with a three-thumbnail selector | Classic |
+| C | A type and colour board: a tall condensed sans, and three swatches (ivory `#F8FAED`, red `#AD221D`, black `#000101`) on a frosted panel over a desert road photo | Classic |
+| D | A dark auction-house event page on desktop and phone: crowd photo hero, icon-and-label section links, a "docket" toolbar (per-page, search, all filters, sort), and lot cards with studio photos | Modern |
+| E | Bidder registration packages: light cards with icon checklists and black buttons over a red-tinted event photo, and a phone version | Modern (light surfaces) |
+| F | A dark lot detail page for a modern supercar: a row of small tags, a bold uppercase title, in-page tabs, previous / next lot controls, one large studio photo, a details grid, and a photo mosaic | Modern |
 
-### 2.2 Modern and exotic references
+### 2.1 Classic and vintage direction (A, B, C)
 
-| Observation in the brief | Extracted principle | Where it lands |
+**What works, and why.**
+
+| Observed | Why it works |
+|---|---|
+| A: every card has the same five-part order: photo, location, serif title, three label-and-value rows, then a tinted footer with bids and price on the left and time left on the right | The eye learns the pattern on the first card and then only reads values. Three cards can be compared row against row. |
+| A: label on the left, value right-aligned, a hairline between rows | Right-aligned values form a column. It is a specification sheet, which is exactly how collectors read a car. |
+| A: time left is the only red text on the card | Urgency is the one thing that is coloured, so it is seen first without any badge. |
+| A: the serif appears only in titles and prices; everything else is a plain sans | The serif reads as "catalogue" because it is rare. |
+| A: categories are tiles with a small side-profile line drawing and a label | A drawing of a body shape is recognised faster than a word, and it gives the page automotive character without decoration. |
+| A: photos are taken on location (workshop wall, forest road, rusted steel door), wide crop, car filling the frame | Context gives a classic car its story. The UI adds nothing on top. |
+| A: white cards on a white page, separated by a border and a soft shadow, footer in a cool grey tint | The tinted footer makes the money and the clock a distinct zone of the card. |
+| B: the screen is two flat fields, cream above and photograph below, with no boxes | Large calm areas feel expensive; the photograph is the only complex thing on screen. |
+| B: a thin strip of small facts (season, a tagline, a countdown, one action) sits between the type and the photo | A metadata strip is a compact, magazine-like way to carry status next to an image. |
+| B: three small thumbnails at the photo's left edge select which car is shown | The viewer chooses; nothing rotates by itself. |
+| C: three colours only, with red sitting between ivory and black | A palette this small makes any use of red deliberate. |
+
+**Principles adopted, and where they land.**
+
+| Principle | Translation in this product |
+|---|---|
+| A fixed card anatomy with spec rows | Lot card rewritten in 4.3: location line, title, up to three label-and-value rows, tinted footer band |
+| Red is spent on time and trouble, nowhere else | Already the plan's rule (principle 3); reference A confirms it. The accent is now the reference red `#AD221D` (5.1) |
+| Serif for titles and money labels only | Fraunces for lot titles (5.2); figures stay in the sans with tabular numerals so columns align, which a text serif does not do as well |
+| Category tiles with line drawings | `CategoryTiles` replaces the plain text strip (4.1, 4.2, 6.2) |
+| Lighter ivory ground, white cards, tinted footer | Paper theme lightened from a grey-beige to an ivory, cards on white, footer on `bg-secondary` (5.1, 5.6) |
+| Flat fields and a metadata strip | The featured lot on Discover: photo, then a one-line strip of bid, bids, time (4.1). The classic lot stage: photo on a flat paper field (5.8) |
+| A manual thumbnail selector | Discover's featured block can switch between the three most active lots (4.1) |
+| A condensed display sans as the brand voice | The wordmark only: Archivo at narrow width, heavy weight (5.2). Not used for content. |
+| Location photography | Photography direction for classic lots (5.8) |
+
+**Explicitly not copied.**
+
+- B's giant red wordmark filling half the first screen. It is a landing-page gesture that pushes lots down, and it spends red on branding. Here the largest text on Discover is a lot title.
+- B's typewriter-style navigation in tiny capitals, its pill-outlined buttons and its two-line menu icon. Navigation here is ordinary, labelled and at readable size; buttons are 4px rectangles.
+- A's tiny bold capitals for "12 BIDS", "TIME LEFT" and the location. The same information is kept in sentence case at 12px so it stays readable at small sizes and in translation.
+- A's drop shadow under cards. Border and background step only.
+- C's frosted glass panel over a photograph. No blur or translucency anywhere.
+- Any sepia, grain or paper texture. The warmth comes from the photographs and the ivory ground.
+- "Excessively beige" is avoided by keeping cards white and by the dark ink of text and buttons: ivory is a ground, not a tint on everything.
+
+### 2.2 Modern and exotic direction (D, E, F)
+
+**What works, and why.**
+
+| Observed | Why it works |
+|---|---|
+| F: one studio photograph, car in three-quarter front view on a neutral grey sweep, nearly full width | With no background story, the paint, the surfacing and the stance are the whole image. The black page makes the red car the brightest thing on screen. |
+| F: the title is short, bold, uppercase sans; nothing else on the page is that heavy | A model name reads like a badge on the car. |
+| F: a row of small rectangular tags above the title carries status facts (reserve, lot, status, location) as "label: value" | Status is read before the title, in one line, without icons. |
+| F: in-page tabs (details, photos, description…) under the title, and "back to results" with previous and next lot at the right | A long lot page becomes navigable, and browsing a catalogue lot by lot does not need the back button. |
+| F: the single primary action is a white button on black, beside the title | The one filled light shape on a dark page cannot be missed. |
+| F: details as a three-column grid, value on top in white, label underneath in grey, hairlines between rows | Values are what people scan for; labels are a caption. More compact than a two-column table. |
+| F: a photo mosaic (large and small tiles: interior, engine, wheels, details) fills the lower page | Bidders inspect a car by its photographs. Seeing them all at once is faster than paging through a carousel. |
+| D: lot cards on dark: studio photo on light grey, a thin meta row (reserve tag, lot number), then event and an uppercase title | Uniform studio backgrounds make a mixed grid tidy even on black. |
+| D: a toolbar above the grid: items per page, search, one "All filters" button, sort | Filters cost no horizontal space until they are wanted, so the grid keeps full width. |
+| D: on the phone, two equal outlined buttons side by side and a horizontally scrolling row of section links | Primary choices stay in thumb reach and at full size. |
+| E: a 3 to 4px coloured top edge marks the featured card; a black filled button on a white card; icon checklists | A coloured edge is a quiet way to mark state without filling a surface. Black on white is the strongest button on a light surface. |
+
+**Principles adopted, and where they land.**
+
+| Principle | Translation in this product |
+|---|---|
+| A true black stage for modern lots | New `stage-dark` token, darker than the Carbon theme background (5.1, 5.8) |
+| Uppercase, heavy, short title as a badge | Modern lot titles are set uppercase in Archivo at wide width (5.2, 5.8). Classic titles keep their written case in the serif. |
+| A facts row above the title | `LotContextBar` on the lot page: lot reference, era, location as plain rectangular tags (4.4) |
+| In-page section navigation, back to results, previous and next lot | `SectionNav` and `LotPager` on the lot page (4.4) |
+| Value-over-label spec grid | `SpecGrid` replaces the two-column table on the lot page (4.4). Cards keep label-left, value-right rows from reference A, because a card is narrow. |
+| A photo mosaic for inspection | New "Photos" section on the lot page with a mosaic, in addition to the stage (4.4) |
+| Filters behind one button until they are needed | Phase 1 Browse has a toolbar and no filter rail; the rail arrives only when structured filters exist (4.2) |
+| The primary action is the one light shape on dark, the one dark shape on light | Already the plan's `action` token (ink on paper, paper on carbon); confirmed by D, E and F |
+| A coloured edge marks state | Already the plan's 2px edges for leading, outbid and final minutes; confirmed by E |
+| Studio photography for modern lots | Photography direction (5.8) |
+
+**Explicitly not copied.**
+
+- D's event hero: a full-height crowd photograph with a centred headline, date, sponsor and two buttons. It is a giant hero that hides the auctions, and this product has no events.
+- D and F's red glow gradients behind the header and under cards, and E's red-tinted photo overlay. No decorative gradients; the only fade is the functional one in 5.8.
+- F's photo watermarks, the "financing" tab, and the "request bidder info" price tag. None exist in this product.
+- D and F's "No Reserve" tag and sequential lot numbers. The backend has no reserve price and no lot numbers; the lot reference is a short id.
+- E's tiered packages, "New" badge, and translucent cards over a photograph. There is no bidder registration tier; anyone with an activated account and funds can bid.
+- Icons beside every spec and every menu item. Icons here are limited to controls and status.
+- The reference's small grey text on black where contrast falls below 4.5:1. All secondary text here meets the ratios in 5.1.
+- A brand script logo. The wordmark is plain type.
+
+### 2.3 How the two directions coexist in one system
+
+Looking at A and F side by side, the things that differ are the ground (ivory against black), the photograph (location against studio), and the title voice (serif against uppercase sans). Everything that carries auction information can be the same component in both. That is how the system is built:
+
+| Layer | Same for every lot | Changes with the lot |
 |---|---|---|
-| Black backgrounds, high contrast | A true dark ground under the photo so paint and light do the work. Text limited to two weights and two sizes over imagery. | Carbon atmosphere |
-| Large dramatic photography, cinematic | Wider crop for the lot stage (21:9 on desktop), no border, no radius, image bleeds to the viewport edge. | Lot stage 4.4 |
-| Minimal typography, precision | Wider sans for the title, tighter tracking on large sizes, fewer words. | Archivo expanded width |
-| Red used carefully | Same red token, lightened for dark ground, same meanings. | 5.1 |
-| Speed | Expressed by responsiveness, not animation. | Section 9 |
+| Navigation, search, toolbar, category tiles | Yes | |
+| Lot card (anatomy, spec rows, footer band, figures, status) | Yes | Only the photograph |
+| Bid panel, countdown, status, extension meter, bid history | Yes | |
+| Spec grid, description, section nav, pager | Yes | |
+| Buttons, forms, spacing, grid, radius, type scale | Yes | |
+| Lot stage background | | Paper field for classic, true black for modern |
+| Lot stage crop | | 16:9 classic, 21:9 modern |
+| Title face and case | | Serif as written for classic, wide sans uppercase for modern |
+| Photography | | On location for classic, studio for modern |
 
-### 2.3 How the two coexist
+- Grids mix eras freely. A card never changes with era, so a 1959 bus beside a 2023 supercar still reads as one catalogue (the mixed grid in reference D shows this working).
+- The site theme (Paper or Carbon) is the viewer's choice and is independent of era. Era only sets the stage of a lot page (5.8).
+- There is one red, one green, one amber, with the same meanings on both grounds.
 
-- The **photograph and its stage** change. The **instrument** (bid panel, countdown, history, specs, navigation, cards in a grid) does not.
-- Grids mix classic and modern lots freely. Cards are identical; only the photo differs. A mixed grid must look like one catalogue.
-- The lot page takes the atmosphere of its lot: classic lots get the paper stage and the serif title; modern lots get the carbon stage and the expanded sans title. Body, specs and the bid panel below the stage follow the site theme.
-- Not copied from any reference: no existing marketplace's layout, logo, colour values or wording is reproduced.
+### 2.4 Lessons for information density
+
+Reference A puts nine facts on a card (location, title, three specs, bids, price, time, watch) and stays calm because of alignment and repetition, not whitespace. Reference F puts eight specs in three short rows. The plan follows both: facts are aligned into columns and rows separated by hairlines, labels are small and quiet, values are dark, and no fact is placed in a decorative container.
+
+### 2.5 What the references changed in this plan
+
+| Section | Change |
+|---|---|
+| 2 | Rewritten from the actual images |
+| 3.2 | Wordmark treatment |
+| 3.3 | `Engine` added to the description header keys |
+| 4.1 | Featured block gains a three-lot selector; categories become tiles |
+| 4.2 | Phase 1 uses a toolbar and a full-width grid instead of a filter rail |
+| 4.3 | Lot card rebuilt around reference A's anatomy; photo ratio 3:2 |
+| 4.4 | Context bar, section navigation, lot pager, value-over-label spec grid, photo mosaic |
+| 5.1 | Lighter ivory Paper theme, reference red `#AD221D`, `stage-dark` token |
+| 5.2 | Uppercase modern titles, wordmark face, card label sizes |
+| 5.6, 5.8 | Card footer band; stage background, bottom fade and photography direction per era |
+| 6.2, 7, 9, 10, 11 | New components and their responsive, motion, accessibility and image rules |
+
+Unchanged because the references confirmed them or did not bear on them: red reserved for state, ink primary buttons, flat cards, the bid panel and all bidding states, live update handling, authentication, wallet, account, sell flow, backend constraints.
 
 ---
 
@@ -132,7 +241,8 @@ Desktop (1024 and up), one bar, 64px:
 ```
 
 - Left: wordmark, two links. Centre: search with type-ahead. Right: available balance (links to wallet), account menu. Signed out: "Sign in" and "Register".
-- No mega menu, no icons-only items, no notification bell (there is no notification API).
+- Wordmark: plain type, Archivo at narrow width (70) and weight 800, uppercase, in `text` colour, 20px. The condensed heavy sans is the one thing taken from the display type in references B and C; it is not used at poster size and not in red.
+- No mega menu, no icons-only items, no notification bell (there is no notification API). No dropdown per top-level item (reference D has six; this product has two destinations).
 - Categories are not in the top bar. They live as a strip on Discover and Browse.
 
 Mobile (below 768): top bar with wordmark, search icon and account; bottom tab bar with four labelled items: Discover, Browse, Bids, Account. On the lot page the bottom tab bar is replaced by the bid bar (4.4), never stacked with it.
@@ -178,7 +288,7 @@ Lot
 **Vehicle data, interim convention (no backend change).** Until the backend has structured fields:
 
 - `item.name`: `"1970 Porsche 911 S 2.2 Coupé"`. Year is parsed from a leading four-digit number.
-- `item.type`: `classic` or `modern`. This drives the category strip and the atmosphere. It is searchable (weighted B in PostgreSQL, ×2 in Elasticsearch).
+- `item.type`: `classic` or `modern`. This drives the category tiles and the atmosphere. It is searchable (weighted B in PostgreSQL, ×2 in Elasticsearch).
 - `item.description`: optional header of `Key: value` lines, a blank line, then prose.
 
 ```
@@ -186,6 +296,7 @@ Make: Porsche
 Model: 911 S
 Year: 1970
 Mileage: 84,200 km
+Engine: 2.2 L flat-six
 Transmission: 5-speed manual
 Fuel: Petrol
 Body: Coupé
@@ -194,7 +305,7 @@ Location: Pune, Maharashtra
 Matching-numbers example finished in Tangerine…
 ```
 
-The parser is tolerant: unknown keys are shown as given, missing keys are omitted, a description with no header is all prose. The Sell flow writes this header from form fields so sellers never type it by hand.
+The parser is tolerant: unknown keys are shown as given, missing keys are omitted, a description with no header is all prose. Cards show the first three available of Mileage, Engine, Transmission, Fuel. The Sell flow writes this header from form fields so sellers never type it by hand.
 
 **Photos, interim.** A static manifest in the frontend (`/public/lots/manifest.json`, keyed by auction id or by a slug in the header: `Photos: porsche-911s-1970`) with pre-optimised files. Lots without photos get the typographic placeholder (5.9). This is demo-grade and is flagged in section 13 as the first backend dependency.
 
@@ -214,13 +325,13 @@ Conventions for all wireframes: `▓` photo, `—` hairline rule, numbers are ta
 ┌ nav ──────────────────────────────────────────────────────────────────────────┐
 ├───────────────────────────────────────────────┬───────────────────────────────┤
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ Ending soon                   │
-│ ▓▓▓▓▓▓▓▓▓▓▓  featured lot  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ ▓▓ 1984 Nissan Sunny   04:12  │
-│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │    ₹3,10,000 · 14 bids        │
+│ [▫]▓▓▓▓▓▓▓▓  featured lot  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ ▓▓ 1984 Nissan Sunny   04:12  │
+│ [▫]▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │    ₹3,10,000   14 bids        │
 │ 1970 Porsche 911 S 2.2 Coupé                  │ — — — — — — — — — — — — — — — │
 │ Current bid ₹42,00,000   31 bids   2d 4h left │ ▓▓ 2019 McLaren 720S   18:40  │
 │                                               │ … 5 rows                      │
 ├───────────────────────────────────────────────┴───────────────────────────────┤
-│ All   Classic   Modern          (category strip, links to /auctions?type=)    │
+│ [▭ All lots] [▭ Classic] [▭ Modern]   (category tiles, link to /auctions?type=)│
 ├───────────────────────────────────────────────────────────────────────────────┤
 │ Most active now                                         View all live auctions │
 │ [card] [card] [card] [card]                                                    │
@@ -235,12 +346,16 @@ Conventions for all wireframes: `▓` photo, `—` hairline rule, numbers are ta
 
   The featured block is 8 columns and capped at 56vh so the "Ending soon" list and the top of the first card row are visible on a 1366×768 screen. There is no marketing headline, no tagline and no call-to-action banner. The featured lot's own title is the largest text on the page.
 
+  The featured block is two flat fields, as in reference B: the photograph, edge to edge inside its columns with no frame, and beneath it the title and a single strip of three figures (current bid, bids, time left) on the page background. Three 56px thumbnails (marked `[▫]`) sit on the photo's left edge and select which of the three most active lots is featured. Selection is manual only; nothing rotates on a timer. The featured block takes the atmosphere of the selected lot in title face only (serif or wide uppercase sans); it does not change the page background.
+
+  Category tiles (from reference A): a rectangle with a small side-profile line drawing on a `bg-secondary` square at the left and the label at the right, 56px high, 2px radius, 1px border. Drawings are original, single-weight line art in `text` colour: a mixed pair for "All lots", a 1960s coupé for "Classic", a low mid-engined car for "Modern". When more categories exist they join the same row, with "Show more" after the fourth.
+
 - **Information hierarchy.** Featured photo, featured title and its three figures, ending-soon list, categories, card rows.
 - **Data sources.**
 
 | Section | Source | Note |
 |---|---|---|
-| Featured | First item of `GET /v1/auctions/trending`; fallback: first `ACTIVE` | |
+| Featured | First three items of `GET /v1/auctions/trending`; fallback: newest `ACTIVE` lots. With fewer than three, the selector shows only what exists; with one, no selector. | |
 | Ending soon | `GET /v1/auctions?status=ACTIVE&limit=100`, sorted by `ends_at` on the client | Interim, see 13 |
 | Most active now | `GET /v1/auctions/trending?limit=8` | |
 | Newly listed | `GET /v1/auctions?status=ACTIVE&limit=8` (already newest first) | |
@@ -248,12 +363,12 @@ Conventions for all wireframes: `▓` photo, `—` hairline rule, numbers are ta
 | Recently sold | `GET /v1/auctions?status=COMPLETED&limit=8` | |
 
   "No reserve" and "Popular" rows from the brief are dropped: reserve does not exist, and "popular" is the trending row.
-- **Components.** `LotStage` (compact variant), `EndingSoonList`, `CategoryStrip`, `LotRow`, `LotCard`.
-- **Interactions.** Everything is a link to a lot or to Browse. The featured lot and ending-soon list are subscribed to the WebSocket (at most 6 subscriptions on this page); card rows are not live, they refresh on focus and every 30 seconds.
+- **Components.** `LotStage` (compact variant), `FeaturedSelector`, `EndingSoonList`, `CategoryTiles`, `LotRow`, `LotCard`.
+- **Interactions.** Everything is a link to a lot or to Browse, except the featured selector, which swaps the featured lot in place. The featured lot and ending-soon list are subscribed to the WebSocket (at most 6 subscriptions on this page); card rows are not live, they refresh on focus and every 30 seconds.
 - **States.** Loading: skeletons with the exact geometry of each block. Empty section: the section is omitted, except when there are no live auctions at all, where the page shows "No auctions are live right now" with the "Starting soon" row promoted to the top and a link to Sell. Error: inline "Could not load auctions. Try again" with a retry button in place of the section.
 - **Desktop.** As drawn.
 - **Tablet.** Featured full width at 16:9, ending-soon becomes a horizontal row of 3 compact items beneath it, card rows 3 across.
-- **Mobile.** Featured lot at 4:3 full bleed, figures beneath. Ending soon as a vertical list of 3 with "See all". The category strip has three items and fits without scrolling. Card rows become single-column lists of 4 with "See all" links, not carousels (`gesture-conflicts`).
+- **Mobile.** Featured lot at 3:2 full bleed, figures beneath. Ending soon as a vertical list of 3 with "See all". The featured selector moves below the photo as three thumbnails in a row. Category tiles become a three-across row of compact tiles (drawing above label). Card rows become single-column lists of 4 with "See all" links, not carousels (`gesture-conflicts`).
 
 ### 4.2 Browse (`/auctions`) and Search results (`/search`)
 
@@ -266,18 +381,18 @@ One page component, two entry points. Search adds a query; everything else is id
 ```
 ┌ nav ──────────────────────────────────────────────────────────────────────────┐
 │ Auctions                                                                       │
-│ All   Classic   Modern                                  84 lots   Sort: Newest ▾│
-│ Live   Starting soon   Sold                (status tabs, one always selected)  │
-├──────────────┬────────────────────────────────────────────────────────────────┤
-│ Filters      │ [card] [card] [card]                                           │
-│ Status       │ [card] [card] [card]                                           │
-│ Category     │ [card] [card] [card]                                           │
-│ — future —   │                                                                │
-│ Make         │                     Load more                                  │
-│ Year         │                                                                │
-│ Price        │                                                                │
-└──────────────┴────────────────────────────────────────────────────────────────┘
+│ [▭ All lots] [▭ Classic] [▭ Modern]                                            │
+│ ——————————————————————————————————————————————————————————————————————————————│
+│ Live   Starting soon   Sold          Showing 24      [ Filters ]  Sort: Newest ▾│
+│ ——————————————————————————————————————————————————————————————————————————————│
+│ [card] [card] [card]                                                           │
+│ [card] [card] [card]                                                           │
+│ [card] [card] [card]                                                           │
+│                              Load more                                         │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
+
+  This follows references A and D: categories as tiles, then one toolbar row, then a full-width grid. There is no filter rail in phase 1, because only two filters are real (status and category) and both are already in the header. The grid gets the width instead, which the richer card (4.3) needs.
 
 - **What is real today versus planned.**
 
@@ -285,69 +400,86 @@ One page component, two entry points. Search adds a query; everything else is id
 |---|---|---|
 | Search box with type-ahead | `suggest` after 2 characters, debounced 200 ms; Enter goes to `/search?q=` | |
 | Status | `status` param: Live, Starting soon, Sold. Cancelled only under "My listings". | |
-| Category (Classic, Modern) | Search with the category word added to `q` when a query exists; otherwise client filter on `item.type` over loaded pages | `type` param on list and search |
+| Category tiles (All lots, Classic, Modern) | Search with the category word added to `q` when a query exists; otherwise client filter on `item.type` over loaded pages | `type` param on list and search |
 | Sort: Newest | Native order | |
 | Sort: Ending soon, Most bids, Price | Client sort over the first 100 active lots, labelled "of the first 100" when more exist | `sort` param |
-| Make, Model, Year, Price range, Body, Location, Transmission, Fuel | **Not shown in phase 1.** The filter rail shows only Status and Category. | Structured fields + filter params |
+| "Filters" button: Make, Model, Year, Price range, Body, Location, Transmission, Fuel | **Not shown in phase 1.** The button is absent until at least one of these filters works. | Structured fields + filter params |
 | Reserve / no reserve | Not shown | Reserve price |
 
-  The rail is designed for the full filter set so adding filters later needs no layout change: each group is a collapsible fieldset with a count of selected values; active filters appear as removable chips above the grid with "Clear all".
+  When structured filters exist, "Filters" opens a panel: on desktop a 264px rail that pushes the grid (grid drops from 4 to 3 columns at 1440, 3 to 2 at 1024) and stays open while browsing; on tablet a side sheet; on mobile a bottom sheet. Each group is a collapsible fieldset with a count of selected values; active filters appear as removable chips under the toolbar with "Clear all". The button shows the number of active filters: "Filters (2)".
 - **Pagination.** Cursor based, so "Load more" (button, 24 per page), not numbered pages and not infinite scroll. The button keeps focus position and announces "24 more lots loaded". Scroll position and loaded pages are restored on back.
 - **Search results specifics.** Heading: `Results for "porsche 911"` with the count unknown (the API returns no total), so show "Showing 20" and "Load more" while `next_cursor` exists. Each card shows the API's `highlight` snippet under the title, with `<em>` rendered as a background tint, not italics, after sanitising to allow only `em`. If `backend` is `postgres`, nothing is shown to the user; it is only logged.
-- **Components.** `SearchBar`, `CategoryStrip`, `StatusTabs`, `SortSelect`, `FilterRail` / `FilterSheet`, `ActiveFilterChips`, `LotGrid`, `LotCard`, `LoadMore`, `EmptyState`.
+- **Components.** `SearchBar`, `CategoryTiles`, `BrowseToolbar` (`StatusTabs`, `SortSelect`, filters button), `LotGrid`, `LotCard`, `LoadMore`, `EmptyState`. Later: `FilterPanel`, `ActiveFilterChips`.
 - **States.**
-  - Loading: 9 card skeletons; rail and header render immediately.
+  - Loading: 9 card skeletons; tiles and toolbar render immediately.
   - Empty (no lots for filters): "No lots match these filters" with "Clear filters".
   - Empty (search): `No lots match "…"`, a hint ("Try the make or the year, for example 911 or 1970") and a link to all live auctions.
   - Error: "Search is unavailable right now. Try again" with retry. 400 for a query under the minimum length is prevented in the UI.
   - Rate limited (429): "Too many requests. Trying again in N seconds" using `Retry-After`, then automatic retry once.
-- **Desktop.** Rail 264px sticky under the nav, grid 3 columns (4 at 1440 and up when the rail is collapsed).
-- **Tablet.** Rail collapses to a "Filters" button opening a side sheet; grid 2 columns at 768, 3 at 1024.
-- **Mobile.** Sticky sub-bar under the top bar: "Filters (2)" and "Sort" as two full-width buttons. Filters open as a full-height bottom sheet with a sticky "Show 31 lots" button and "Clear"; closing by swipe or the close button. Grid becomes a single column of horizontal list cards (4.3).
+- **Desktop.** Toolbar sticks under the nav while scrolling. Grid 3 columns from 1024, 4 columns from 1440.
+- **Tablet.** Same toolbar; grid 2 columns at 768.
+- **Mobile.** Category tiles in one row of three. Sticky sub-bar under the top bar: status as a segmented control, and "Sort" as a native select (plus "Filters (2)" beside it once filters exist, the two as equal-width buttons as on the phone in reference D). Filters, when they exist, open as a full-height bottom sheet with a sticky "Show 31 lots" button and "Clear"; closing by swipe or the close button. The grid is a single column of full cards (4.3), so the photograph stays large; the compact list layout is for the ending-soon and account lists.
 
 ### 4.3 Lot card
 
-One component, two layouts. No shadow, no radius above 2px, no hover lift.
+One component, two layouts. The anatomy follows reference A: a fixed five-part order so cards compare row against row. No shadow, no radius above 2px, no hover lift.
 
-Grid layout (desktop, tablet):
+Grid layout (desktop, tablet, mobile browse):
 
 ```
 ┌──────────────────────────────┐
-│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│  4:3 photo, object-fit cover
-│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│  top-left: status tag only when not plain "live"
-│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓♡│  bottom-right: watch button (44px target)
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│  1  photo, 3:2, object-fit cover
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│     top-left: status tag, only when not plain "live"
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
 ├──────────────────────────────┤
-│ 1970 Porsche 911 S 2.2 Coupé │  title, serif, 2 lines max
-│ 84,200 km   Manual   Pune    │  three facts, condensed sans, muted
+│ Pune, Maharashtra          ♡ │  2  location (12px, muted) and watch button
+│ 1970 Porsche 911 S 2.2 Coupé │  3  title, serif 18px, 2 lines max
+│                              │
+│ Mileage            84,200 km │  4  up to three spec rows: label left (muted),
+│ ———————————————————————————— │     value right (text), hairline between
+│ Engine        2.2 L flat-six │
+│ ———————————————————————————— │
+│ Transmission          Manual │
 ├──────────────────────────────┤
-│ Current bid        Time left │  labels, 12px
-│ ₹42,00,000          2d 4h    │  figures, 20px semibold, tabular
-│ 31 bids                      │  12px muted
+│ 31 bids            Time left │  5  footer band on bg-secondary:
+│ ₹42,00,000             2d 4h │     labels 12px, figures 20px semibold tabular
 └──────────────────────────────┘
 ```
 
-List layout (mobile browse, ending-soon list, account lists): photo 112×84 on the left, title and one fact line, then bid and time on one row.
+List layout (ending-soon list, account lists, watchlist): photo 112×75 on the left, title and location, then bid and time on one row. No spec rows.
 
-**Hierarchy, in reading order:** photo, title, current bid, time left, bid count, facts. Status sits on the photo because it changes how every other number is read.
+**Hierarchy, in reading order:** photo, title, current bid, time left, bid count, specs, location. The footer band is the card's instrument: it is the only tinted area, so the money and the clock are found in the same place on every card.
+
+**Footer band rules.**
+
+- Left: the bid count is the label ("31 bids", or "No bids yet"), the amount is the figure. Before the first bid the figure is the starting bid and the label reads "Starting bid".
+- Right: "Time left" label, time figure. The time figure is `text` colour normally and red in endingSoon and finalMinutes, as in reference A where the clock is the only red on the card. Because this product also shows lots with days left, red is not used for every clock, only for the last hour.
+- Figures are right-aligned on the right side and left-aligned on the left, and never wrap. At narrow widths the label truncates before the figure does.
+
+**Spec rows.** The first three available of Mileage, Engine, Transmission, Fuel from the description header. If a lot has no header, the three rows are omitted and the card is shorter; within one grid row, cards align their footer bands to the bottom so a short card does not break the line. No icons in spec rows.
+
+**Activity marker.** Lots that appear in the trending list show a small rising-line icon beside the watch button with the accessible name "Bidding is active", taken from the trend marker on one card in reference A. It is `text-muted`, never red.
 
 **Content rules by phase.**
 
-| Phase | Left figure | Right figure | Tag on photo |
+| Phase | Footer left (label / figure) | Footer right (label / figure) | Tag on photo |
 |---|---|---|---|
-| scheduled | "Starting bid ₹…" | "Starts 4 Oct, 18:00" | Starting soon |
-| live | "Current bid ₹…" (or "Starting bid" when there are no bids) | "2d 4h" | none |
-| endingSoon | same | "42m 10s" in red, with a red dot | Ending soon |
-| finalMinutes | same | "01:47" in red, ticking | Final minutes |
-| closing | same | "Closing" | Closing |
-| sold | "Sold for ₹…" | "3 Oct" | Sold |
-| unsold | "No bids" | "Ended 3 Oct" | Ended |
-| cancelled | "Starting bid ₹…" | "Cancelled" | Cancelled |
+| scheduled | Starting bid / ₹… | Starts / 4 Oct, 18:00 | Starting soon |
+| live | 31 bids / ₹… | Time left / 2d 4h | none |
+| endingSoon | same | Time left / 42m 10s in red, with a red dot | Ending soon |
+| finalMinutes | same | Time left / 01:47 in red, ticking | Final minutes |
+| closing | same | Time left / Closing | Closing |
+| sold | 31 bids / Sold for ₹… | Ended / 3 Oct | Sold |
+| unsold | No bids / starting bid, muted | Ended / 3 Oct | Ended |
+| cancelled | Starting bid / ₹… | Cancelled | Cancelled |
 
-Viewer overlays (signed in): a 2px left edge on the text block plus a text line replacing the bid count: "You are leading" (green) or "You have been outbid" (red). Colour is never the only signal.
+Tags on the photo are 2px-radius rectangles, `surface-elevated` background, `text` colour, 12px, with the red dot only for the two urgent phases. They are never pills and never filled red.
 
-Reserve status is not on the card (it does not exist). Location and the three facts appear only when the description header provides them; otherwise the line is omitted and the card keeps its height through a reserved line box.
+Viewer overlays (signed in): a 2px top edge on the footer band (green or red) and the footer's left label replaced by "You are leading" or "You have been outbid" with an icon. Colour is never the only signal.
 
-The whole card is one link (title is the link, stretched over the card); the watch button is a separate control above it.
+Reserve status is not on the card (it does not exist). Location appears only when the description header provides it; otherwise the watch button sits alone on that line.
+
+The whole card is one link (the title is the link, stretched over the card); the watch button is a separate control above it.
 
 ### 4.4 Lot page (`/auctions/:id`)
 
@@ -359,32 +491,38 @@ The most important screen. It is both the detail page and the live bidding exper
 
 ```
 ┌ nav ──────────────────────────────────────────────────────────────────────────┐
-│ Auctions / Classic / Lot 7f3c2a1b                                              │
+│ ‹ Back to results                                        ‹ Previous   Next ›   │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  stage: lead photo, full bleed  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  1 / 24  ▓▓▓▓│
 │ [thumb][thumb][thumb][thumb][thumb][thumb][thumb]  View all 24 photos          │
 ├──────────────────────────────────────────────────┬────────────────────────────┤
-│ 1970 Porsche 911 S 2.2 Coupé            ♡ Watch  │ ● Live          Lot 7f3c2a1b│
-│ 84,200 km   Manual   Petrol   Pune       Share   │ Time remaining              │
-│ ———————————————————————————————————————————————— │ 2d 04h 12m 08s              │
-│ Specifications                                   │ Ends Sun 4 Oct, 18:00 IST   │
-│ Make        Porsche     Transmission  5-sp manual│ ——————————————————————————  │
-│ Model       911 S       Fuel          Petrol     │ Current bid                 │
-│ Year        1970        Body          Coupé      │ ₹42,00,000                  │
-│ Mileage     84,200 km   Location      Pune       │ 31 bids                     │
+│ [Lot 7f3c2a1b] [Classic] [Pune, Maharashtra]     │ ● Live                      │
+│ 1970 Porsche 911 S 2.2 Coupé            ♡ Watch  │ Time remaining              │
+│                                          Share   │ 2d 04h 12m 08s              │
+│ Specifications  Description  Photos  Bid history │ Ends Sun 4 Oct, 18:00 IST   │
 │ ———————————————————————————————————————————————— │ ——————————————————————————  │
-│ Description                                      │ Your bid                    │
-│ Matching-numbers example finished in…            │ [ ₹ 42,50,000            ]  │
-│                                                  │ Minimum next bid ₹42,50,000 │
-│ ———————————————————————————————————————————————— │ [+₹50,000] [+₹1,00,000] [+₹2,50,000]│
-│ Bid history                              31 bids │ [      Place bid ₹42,50,000     ]│
-│ ₹42,00,000   Bidder a41c        2 min ago        │ Available ₹60,00,000  Add funds │
-│ ₹41,50,000   You                5 min ago        │ ——————————————————————————  │
-│ ₹41,00,000   Bidder a41c        9 min ago        │ Extensions used 0 of 10     │
-│ Show earlier bids                                │ Bids in the last 2 minutes  │
-│ ———————————————————————————————————————————————— │ extend the auction.         │
+│ Specifications                                   │ Current bid                 │
+│ Porsche      911 S        1970        84,200 km  │ ₹42,00,000                  │
+│ Make         Model        Year        Mileage    │ 31 bids                     │
+│ ———————————————————————————————————————————————— │ ——————————————————————————  │
+│ 2.2 L flat-6 5-sp manual  Petrol      Coupé      │ Your bid                    │
+│ Engine       Transmission Fuel        Body       │ [ ₹ 42,50,000            ]  │
+│ ———————————————————————————————————————————————— │ Minimum next bid ₹42,50,000 │
+│ Description                                      │ [+₹50,000] [+₹1,00,000] [+₹2,50,000]│
+│ Matching-numbers example finished in…            │ [      Place bid ₹42,50,000     ]│
+│ ———————————————————————————————————————————————— │ Available ₹60,00,000  Add funds │
+│ Photos                                    24     │ ——————————————————————————  │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓ ▓▓▓▓▓▓                     │ Extensions used 0 of 10     │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓ ▓▓▓▓▓▓   (mosaic)          │ Bids in the last 2 minutes  │
+│ ▓▓▓▓▓▓ ▓▓▓▓▓▓ ▓▓▓▓▓▓ ▓▓▓▓▓▓    Show all 24       │ extend the auction.         │
+│ ———————————————————————————————————————————————— │                             │
+│ Bid history                              31 bids │                             │
+│ ₹42,00,000   Bidder a41c        2 min ago        │                             │
+│ ₹41,50,000   You                5 min ago        │                             │
+│ Show earlier bids                                │                             │
+│ ———————————————————————————————————————————————— │                             │
 │ Seller                                           │                             │
 │ Seller 9c1e   Listed 28 Sep                      │                             │
 │ ———————————————————————————————————————————————— │                             │
@@ -398,12 +536,20 @@ The most important screen. It is both the detail page and the live bidding exper
   1. Lead photo.
   2. Title.
   3. Bid panel: status, time remaining, current bid, your position, bid input, minimum, action.
-  4. Key facts.
-  5. Specifications, description, bid history, seller, related lots.
+  4. Context tags (lot reference, era, location).
+  5. Specifications, description, photos, bid history, seller, related lots.
 
-- **Title block.** Title uses the era treatment (5.8). Year, make and model are in the title; they are not repeated as separate fields above it. The fact line shows up to four facts from the description header.
+- **Top row: back and pager.** "Back to results" returns to the list the viewer came from, restored (scroll position, loaded pages, filters). "Previous" and "Next" step through that same list, so a catalogue can be walked lot by lot (reference F). When the lot was opened directly from a link, the row shows "All auctions" instead and no pager. Keyboard: the pager is ordinary links; no single-key shortcuts.
 
-- **Photo gallery.** Stage shows the lead photo. Thumbnail strip beneath (7 visible at desktop). Click on stage or "View all" opens a full-screen viewer: one image at a time, arrow keys and swipe, counter, close on Escape, focus trapped and returned. No autoplay, no zoom-on-hover lens, no 360 spin. With no photos, the stage becomes the typographic placeholder at reduced height (32vh) and the thumbnail strip is omitted.
+- **Context tags.** A row of up to three plain rectangular tags above the title, in the manner of reference F's tag row: lot reference, era, location. 12px, 2px radius, 1px border, no fill, no icons. Auction status is not repeated here; it lives at the top of the bid panel, a few pixels to the right, where the numbers it qualifies are.
+
+- **Title block.** Title uses the era treatment (5.8): serif in written case for classic lots, wide uppercase sans for modern lots. Year, make and model are in the title; they are not repeated as separate fields above it.
+
+- **Section navigation.** A row of text links under the title: Specifications, Description, Photos, Bid history. They are in-page anchors, not tabs: all sections stay on the page and in the document order, the links scroll to them. The row sticks under the nav on desktop once the title scrolls away, with the current section marked by a 2px underline in `text` colour. Sections without content (no photos) are omitted from the row.
+
+- **Specifications.** A grid of value-over-label cells from the description header (reference F): value in `text` at 16px medium, label beneath in `text-muted` at 12px, a hairline between rows, no vertical rules, no icons. Four columns on desktop, three on tablet, two on mobile. Built as a description list so each value is read with its label. Order: Make, Model, Year, Mileage, Engine, Transmission, Fuel, Body, Location, then any other keys the seller supplied. Lots with no header show no Specifications section.
+
+- **Photo gallery.** Stage shows the lead photo. Thumbnail strip beneath (7 visible at desktop). Lower on the page, the Photos section shows a mosaic (reference F): the first tile spans two columns and two rows, the rest are single tiles, 4 columns on desktop, 3 on tablet, 2 on mobile, 4px gaps, every tile a fixed 3:2 box. It shows up to 11 tiles, then "Show all 24". When the manifest groups photos (exterior, interior, engine, details), the mosaic is ordered by group with a small text label at the start of each group. Tiles are buttons that open the viewer at that photo. No watermarks. Click on stage, a thumbnail, a tile or "View all" opens a full-screen viewer: one image at a time, arrow keys and swipe, counter, close on Escape, focus trapped and returned. No autoplay, no zoom-on-hover lens, no 360 spin. With no photos, the stage becomes the typographic placeholder at reduced height (32vh) and the thumbnail strip is omitted.
 
 - **Bid panel.** Described in 4.5.
 
@@ -421,14 +567,14 @@ The most important screen. It is both the detail page and the live bidding exper
 
 - **Not found / cancelled.** 404: "This lot does not exist" with a link to live auctions. Cancelled: full page still renders, bid panel replaced by "This auction was cancelled before it started."
 
-- **Tablet (768 to 1023).** Stage 16:9. Single column. Bid panel becomes a full-width block directly under the title, and a compact sticky bar appears at the bottom once that block scrolls out of view.
+- **Tablet (768 to 1023).** Stage 16:9. Single column. Section navigation scrolls horizontally if it does not fit. Bid panel becomes a full-width block directly under the title, and a compact sticky bar appears at the bottom once that block scrolls out of view.
 
 - **Mobile (below 768).**
 
 ```
 ┌──────────────────────────┐
 │ ‹ Auctions        ♡  ⤴  │
-│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│ swipeable gallery, 4:3, dots + "1 / 24"
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│ swipeable gallery, 3:2, dots + "1 / 24"
 │▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
 │ 1970 Porsche 911 S 2.2   │
 │ 84,200 km  Manual  Pune  │
@@ -447,6 +593,8 @@ The most important screen. It is both the detail page and the live bidding exper
 │ [   Place bid          ] │
 └──────────────────────────┘
 ```
+
+  On mobile the back link and pager collapse into the top bar ("‹ Auctions"); previous and next are offered at the foot of the page as two equal outlined buttons. Context tags sit under the title on one line. The section navigation is replaced by the collapsible sections shown above, plus a Photos section with a two-column mosaic.
 
   Tapping "Place bid" opens the bid sheet: a bottom sheet containing the full bid panel (time, current bid, your position, input with numeric keypad, quick increments, confirm button, balance). The sheet stays open after a bid so the result is seen in place. The sticky bar always shows current bid and time; its button label changes with state ("Place bid", "Bid again", "Sign in to bid", "Auction ended"). In landscape the bar collapses to a single 48px row.
 
@@ -627,21 +775,24 @@ Two themes share one set of names. "Paper" is the light theme and the default; "
 
 | Token | Paper | Carbon | Use |
 |---|---|---|---|
-| `bg` | `#ECEBE7` | `#101113` | Page background |
-| `bg-secondary` | `#E1DFD8` | `#17191C` | Bands, table header rows, skeleton base |
-| `surface` | `#F6F5F1` | `#1C1F23` | Cards, panels, inputs |
+| `bg` | `#F4F3EC` | `#101113` | Page background |
+| `bg-secondary` | `#E8E6DE` | `#17191C` | Card footer band, table header rows, category tile drawing square, skeleton base |
+| `surface` | `#FFFFFF` | `#1C1F23` | Cards, bid panel, inputs |
 | `surface-elevated` | `#FFFFFF` | `#262A2F` | Sheets, menus, dialogs, toasts |
-| `text` | `#14130F` (15.6:1 on bg) | `#F2F0EB` (16.6:1) | Titles, figures, body |
-| `text-secondary` | `#45433D` (8.3:1) | `#B8B5AD` (9.2:1) | Fact lines, descriptions, labels |
-| `text-muted` | `#66635B` (5.0:1 on bg, 4.5:1 on bg-secondary) | `#9D9A92` (6.7:1; 5.1:1 on elevated) | Timestamps, helper text, bid counts |
-| `border` | `#CBC8BE` | `#30343A` | Hairlines, dividers, card outlines (decorative, not relied on alone) |
-| `border-strong` | `#7C786D` (3.7:1) | `#737882` (4.3:1) | Input and control outlines (meets 3:1 for UI components) |
-| `action` | `#14130F` with text `#ECEBE7` | `#F2F0EB` with text `#101113` | Primary buttons. Ink on paper, paper on carbon. |
-| `accent` / `live` | `#B0221B` (5.7:1 on bg; white on it 6.8:1) | `#F4665D` (6.2:1 on bg; 4.75:1 on elevated) | Live dot, ending soon, final minutes, outbid |
+| `text` | `#14130F` (16.7:1 on bg) | `#F2F0EB` (16.6:1) | Titles, figures, body |
+| `text-secondary` | `#45433D` (8.9:1) | `#B8B5AD` (9.2:1) | Fact lines, descriptions, labels |
+| `text-muted` | `#66635B` (5.4:1 on bg, 4.8:1 on bg-secondary) | `#9D9A92` (6.7:1; 5.1:1 on elevated) | Timestamps, helper text, bid counts |
+| `border` | `#D3D0C6` | `#30343A` | Hairlines, dividers, card outlines (decorative, not relied on alone) |
+| `border-strong` | `#7C786D` (4.0:1 on bg, 4.4:1 on surface) | `#737882` (4.3:1) | Input and control outlines (meets 3:1 for UI components) |
+| `action` | `#14130F` with text `#F4F3EC` | `#F2F0EB` with text `#101113` | Primary buttons. Ink on paper, paper on carbon. |
+| `accent` / `live` | `#AD221D` (6.2:1 on bg, 5.6:1 on bg-secondary; white on it 6.9:1) | `#F4665D` (6.2:1 on bg; 4.75:1 on elevated) | Live dot, ending soon, final minutes, outbid |
 | `danger` | same as accent | same as accent | Errors and destructive actions, always with an icon and text |
-| `success` | `#1D6A43` (5.5:1) | `#4FC48C` (8.6:1) | Bid accepted, leading, won |
-| `warning` | `#855400` (5.4:1) | `#E3A63A` (8.8:1) | Reconnecting, extended, pending |
+| `success` | `#1D6A43` (5.9:1) | `#4FC48C` (8.6:1) | Bid accepted, leading, won |
+| `warning` | `#855400` (5.8:1) | `#E3A63A` (8.8:1) | Reconnecting, extended, pending |
 | `focus` | `#14130F` | `#F2F0EB` | 2px ring with 2px offset |
+| `stage-dark` | `#070708` | `#070708` | Background of the modern lot stage only, in both themes. Text on it uses the Carbon text values (17.7:1, muted 7.2:1, red 6.6:1). |
+
+The Paper values were refined after the references: the ground is a lighter ivory than the first draft (closer to reference C's `#F8FAED`, kept slightly greyer so white cards still separate from it), cards are white as in reference A, and the red is reference C's `#AD221D`. Reference C's near-black is used for the modern stage; the Carbon theme stays a step lighter than pure black so that surfaces, borders and elevation remain distinguishable.
 
 Rules:
 
@@ -650,7 +801,7 @@ Rules:
 - **Auction-live** = red dot + "Live". **Ending soon** = red time figure + "Ending soon" tag. **Final minutes** = the same plus a 2px red top edge on the bid panel.
 - Green and amber appear only as text with an icon or as a 2px edge, never as filled backgrounds larger than a tag.
 - No gradients, except one functional scrim: a bottom-up `text`-to-transparent overlay behind text that sits on a photograph.
-- Why not the palettes the skill database suggested: its "Auction Platform" row proposes dark mode with bid green, outbid red and countdown amber, and its "Automotive" row proposes slate plus action red. The state colours are adopted. The slate and the gold-accent luxury palette are rejected in favour of the brief's warm neutrals and the project's existing `paper` and `ink`.
+- Why not the palettes the skill database suggested: its "Auction Platform" row proposes dark mode with bid green, outbid red and countdown amber, and its "Automotive" row proposes slate plus action red. The state colours are adopted. The slate and the gold-accent luxury palette are rejected in favour of the ivory, red and black of the references and the project's existing `ink`.
 
 ### 5.2 Typography
 
@@ -660,14 +811,15 @@ Two families, clearly different, both variable and available from Google Fonts u
 |---|---|---|
 | Display (lot title on the lot page, featured lot) | **Fraunces**, weight 400, optical size auto, `SOFT` 0, `WONK` 0, tracking −0.01em | 44 / 30, line height 1.1 |
 | Heading (section headings, card titles, page titles) | Fraunces 500 | 28, 22, 18 / 24, 20, 17, line height 1.2 |
-| Display, modern lots | **Archivo**, weight 600, width 112, tracking −0.02em | same sizes as display |
+| Display, modern lots | **Archivo**, weight 700, width 112, uppercase, tracking −0.01em | 40 / 26, line height 1.05 (uppercase runs wider, so one step smaller than the serif) |
+| Wordmark | Archivo, weight 800, width 70, uppercase | 20 |
 | Body | Archivo 400, width 100 | 16, line height 1.55; description measure 60 to 72 characters |
-| Metadata (fact lines, labels, table headers, tags) | Archivo 500, width 88 | 13 and 12, line height 1.35, sentence case |
+| Metadata (spec labels and values, card footer labels, location, table headers, tags) | Archivo 500, width 88 | 13 and 12, line height 1.35, sentence case |
 | Numeric (bids, countdowns, balances) | Archivo 600, width 100, `font-variant-numeric: tabular-nums lining-nums` | 40 (panel current bid), 28 (countdown), 20 (card figures), 16 (table) |
 
 - Why these: Fraunces gives the collector-catalogue warmth for classic lots without the fashion-brand feel of the high-contrast serifs the skill database suggested (Playfair, Cormorant; Cormorant is also what the watch prototype used). Archivo has a width axis, which lets one family be condensed for dense metadata and widened for the badge-like titles of modern cars, so "two atmospheres" costs no extra font.
 - No monospace anywhere. Tabular figures do the job without the terminal look.
-- No all-caps labels, no letter-spaced eyebrows. Labels are sentence case at metadata size.
+- No all-caps labels, no letter-spaced eyebrows. Labels are sentence case at metadata size. Uppercase appears in exactly two places: the wordmark and the title of a modern lot, where it works like a badge on the car (reference F). Uppercase titles are produced with CSS from the stored title, so screen readers and search still get the written case.
 - Type scale: 12, 13, 14, 16, 18, 20, 22, 28, 36, 44. Nothing else.
 - Loading: self-host both as variable WOFF2, subset to Latin plus the rupee sign, `font-display: swap`, preload the two files, fallback stacks with `size-adjust` to avoid shift (Fraunces → Georgia, Archivo → Arial).
 - Currency and dates use `Intl.NumberFormat` and `Intl.DateTimeFormat`. Amounts are integers in the smallest unit; they are never parsed or stored as floats.
@@ -707,14 +859,14 @@ Cards have no shadow in any state.
 
 - 1px `border` hairlines separate: blocks inside the bid panel, rows in bid history and ledger, spec rows, card photo from card text, sections on the lot page.
 - Spec tables use row rules only, no vertical rules, no zebra.
-- Cards have a 1px `border` outline in Paper and none in Carbon (the surface step is enough).
+- Cards have a 1px `border` outline in Paper and none in Carbon (the surface step is enough). Inside a card, a hairline separates the photo from the text, each spec row from the next, and the text from the footer band; the footer band is the only tinted area (`bg-secondary`).
 - A 2px coloured left or top edge is the only "accent border" and is reserved for viewer state (leading, outbid) and final minutes.
 
 ### 5.7 Icons and controls
 
 - One icon set, 1.5px stroke (Lucide or Phosphor regular). Icons accompany text; icon-only buttons (watch on a card, close, gallery arrows) have accessible names.
 - No emoji. No arrow glyphs appended to link text.
-- Buttons: primary (ink fill), secondary (1px `border-strong` outline), quiet (text only, underlined on hover), destructive (red outline; red fill only inside a confirmation dialog). Heights 44 default, 36 compact on desktop tables only.
+- Buttons: primary (ink fill on Paper, paper fill on Carbon and on the dark stage: the one light shape on a dark page, as in references D and F), secondary (1px `border-strong` outline), quiet (text only, underlined on hover), destructive (red outline; red fill only inside a confirmation dialog). Heights 44 default, 36 compact on desktop tables only.
 - Inputs: 44 high, visible label above, helper or error text below, 1px `border-strong`, 2px `focus` ring.
 
 ### 5.8 Atmospheres: one system, two worlds
@@ -723,17 +875,18 @@ Cards have no shadow in any state.
 
 | Property | Classic | Modern |
 |---|---|---|
-| Stage background (behind and around the photo, letterbox areas) | Paper `bg-secondary` | Carbon `bg` (true dark, regardless of site theme) |
+| Stage background (behind and around the photo, letterbox areas) | Paper `bg-secondary` (regardless of site theme) | `stage-dark` (regardless of site theme) |
 | Stage aspect ratio (desktop) | 16:9 | 21:9 |
-| Title face | Fraunces 400 | Archivo 600, width 112 |
-| Title case and tracking | As written, −0.01em | As written, −0.02em |
-| Photo treatment | None. No filter, no vignette. | None. A bottom scrim only where text overlaps the image. |
+| Title face | Fraunces 400 | Archivo 700, width 112 |
+| Title case and tracking | As written, −0.01em | Uppercase, −0.01em |
+| Photo treatment | None. No filter, no vignette, no sepia. Hard edge against the paper field. | None on the image itself. The bottom 48px of the stage fades from the photo into `stage-dark` so a studio backdrop does not end in a hard line against black (the one fade in the product, from reference F). |
+| Preferred lead photograph | On location: a wall, a road, a workshop. Three-quarter or side view. | Studio or plain backdrop, even light, three-quarter front view. |
 | Gallery thumbnails | 2px radius, 8px gap | 0 radius, 4px gap |
 | Rule under the title block | 1px `border` | 1px `border-strong` |
 
 Everything else, including the bid panel, cards, specs, history, colours of state, spacing and controls, is identical. Cards in grids ignore era entirely. The site theme (Paper or Carbon) is the user's choice or system setting and is independent of era; a classic lot in Carbon theme keeps its paper stage, a modern lot in Paper theme keeps its dark stage. That contrast is the intended effect: the stage is a lit plinth, the page around it is the catalogue.
 
-Photography direction (for seed content and seller guidance): three-quarter front as the lead image, car fills at least 70% of frame width, horizon level, no text or watermarks baked in, consistent 4:3 source crop with a 21:9-safe centre band for modern lots.
+Photography direction (for seed content and seller guidance): car fills at least 70% of frame width, horizon level, no text or watermarks baked in, consistent 3:2 source crop with a 21:9-safe centre band for modern lots. The era preference above is guidance, not a rule: a classic car shot in a studio still gets the paper stage, and nothing in the UI depends on the kind of photograph. A set should cover exterior (front and rear three-quarter, both sides), interior, engine and details, in that order, which is also the mosaic order.
 
 ### 5.9 Placeholder for lots without photos
 
@@ -788,16 +941,22 @@ web/src/
 |---|---|---|
 | `AppShell`, `Navbar`, `BottomTabs`, `Footer` | Layout and navigation | `BottomTabs` hidden on the lot page |
 | `SearchBar` | Query input, type-ahead from `suggest`, keyboard listbox | Debounced, cancels stale requests |
-| `CategoryStrip` | All, Classic, Modern | Links, current item marked |
-| `StatusTabs`, `SortSelect`, `FilterRail`, `FilterSheet`, `ActiveFilterChips` | Browse controls bound to the URL | Rail and sheet render the same filter definitions |
+| `CategoryTiles` | All lots, Classic, Modern: line drawing plus label | Links, current item marked with a 2px `text` bottom edge |
+| `FeaturedSelector` | Three thumbnails that choose the featured lot on Discover | A tab list; manual only |
+| `BrowseToolbar`, `StatusTabs`, `SortSelect` | Browse controls bound to the URL | |
+| `FilterPanel`, `ActiveFilterChips` | Later, when structured filters exist | One set of filter definitions rendered as rail, side sheet or bottom sheet |
 | `LotGrid`, `LotRow` | Grid and list containers, skeleton counts | |
 | `LotCard` | Section 4.3; `layout="grid" | "list"` | One component; replaces the brief's separate AuctionCard and VehicleCard, which would show the same data |
 | `LotPhoto` | Responsive image, aspect box, blur placeholder, typographic fallback | Used by card, stage, thumbnails |
 | `LoadMore` | Cursor pagination control with announcement | Replaces Pagination: the API is cursor based |
 | `LotStage` | Lead photo with era atmosphere | Sets `data-era` |
-| `PhotoGallery`, `PhotoViewer` | Thumbnails and full-screen viewer | |
-| `LotHeader` | Title, facts, watch, share | |
-| `SpecTable` | Key and value pairs from parsed specs | Two columns desktop, one mobile |
+| `PhotoStrip`, `PhotoMosaic`, `PhotoViewer` | Thumbnails under the stage, mosaic section, full-screen viewer | Mosaic tiles are lazy |
+| `LotPager` | Back to results, previous, next | Reads the originating list from router state |
+| `LotContextBar` | Lot reference, era, location tags | |
+| `LotHeader` | Title, watch, share | |
+| `SectionNav` | In-page anchor links, sticky, current section marked | |
+| `SpecGrid` | Value-over-label cells from parsed specs | Description list; 4, 3, 2 columns |
+| `SpecRows` | Label-left, value-right rows on the card | Up to three |
 | `LotDescription` | Prose with clamp and expand on mobile | Plain text only, rendered safely |
 | `BidPanel` | Section 4.5 container; arranges blocks by phase and viewer | The only component that knows the block order |
 | `PriceDisplay` | Labelled money figure, sizes `panel`, `card`, `table` | Handles "Starting bid" versus "Current bid" versus "Sold for" |
@@ -835,14 +994,18 @@ Breakpoints: 375 (base), 768, 1024, 1440. Built mobile-first.
 | Element | Mobile (below 768) | Tablet (768 to 1023) | Desktop (1024 and up) |
 |---|---|---|---|
 | Navigation | Top bar + 4 bottom tabs; search opens full screen | Top bar with inline search, no bottom tabs | Full top bar |
-| Lot cards | List layout, single column | Grid, 2 columns | Grid, 3 columns (4 at 1440 with rail collapsed) |
-| Filters | Full-height bottom sheet, sticky apply button | Side sheet | Sticky rail, 264px |
+| Lot cards | Full card, single column (list layout only in ending-soon and account lists) | Grid, 2 columns | Grid, 3 columns; 4 at 1440 |
+| Filters (when they exist) | Full-height bottom sheet, sticky apply button | Side sheet | 264px rail opened from the toolbar |
+| Category tiles | Three across, drawing above label | One row | One row |
+| Section navigation (lot) | Replaced by collapsible sections | Horizontal scroll row | Sticky row |
+| Back and pager (lot) | Back in top bar; previous and next at page foot | Top row | Top row |
 | Sort | Native select in the sticky sub-bar | Menu | Menu |
-| Lot stage / gallery | Swipeable 4:3, counter, tap for viewer | 16:9 stage + thumbnail strip | 16:9 or 21:9 stage + strip |
+| Lot stage / gallery | Swipeable 3:2, counter, tap for viewer | 16:9 stage + thumbnail strip | 16:9 or 21:9 stage + strip |
 | Bid panel | Summary block inline + sticky bid bar + bid sheet | Inline block under title + sticky bar after scroll | Sticky right column |
 | Countdown | In the sticky bar and inline; compact format ("2d 4h") in the bar until under 1 hour | Full format | Full format |
 | Bid history | 5 rows, "Show all" expands in place; time as relative only | 10 rows | 20 rows, absolute time on hover and focus |
-| Specs | One column | Two columns | Two columns |
+| Specs | Two columns | Three columns | Four columns |
+| Photo mosaic | Two columns | Three columns | Four columns, first tile 2×2 |
 | Sell | One step per screen, sticky continue | Form + preview stacked | Form + sticky preview |
 | Account | Segmented control, lists | Left list + content | Left list + content |
 | Tables (ledger) | Stacked rows: label and value pairs | Table | Table |
@@ -915,6 +1078,7 @@ Tokens: `fast` 120 ms, `base` 180 ms, `slow` 240 ms; enter `cubic-bezier(0.2, 0,
 | Outbid / leading / result | Position block cross-fades over 180 ms |
 | Bid pending → accepted | Button spinner, then the button returns; confirmation text fades in |
 | Gallery image change | 180 ms cross-fade; swipe tracks the finger on touch |
+| Featured lot switched on Discover | 180 ms cross-fade of photo; title and figures swap instantly |
 | Sheet, dialog, menu | Slide or fade in 180 to 240 ms, out faster |
 | Toast | Fade and 8px rise in, fade out |
 | Hover | Card: title underline. Button: background step. 120 ms. No scaling, no lift, no image zoom. |
@@ -923,7 +1087,7 @@ Tokens: `fast` 120 ms, `base` 180 ms, `slow` 240 ms; enter `cubic-bezier(0.2, 0,
 
 ### 9.2 Not used
 
-Scroll-triggered reveals, parallax, staggered grid entrances, page transitions, number-rolling tickers, pulsing "live" dots, auto-advancing carousels, cursor effects, 3D. The design-system search returned a scroll-reveal GSAP preset and a "scroll-triggered storytelling" page pattern; both are rejected for this product.
+Scroll-triggered reveals, parallax, staggered grid entrances, page transitions, number-rolling tickers, pulsing "live" dots, auto-advancing carousels, cursor effects, 3D, glows or animated gradients behind headers and cards (seen in references D and F). The design-system search returned a scroll-reveal GSAP preset and a "scroll-triggered storytelling" page pattern; both are rejected for this product.
 
 Reduced motion: all transitions become instant, the price tint becomes a 1 s static outline, skeletons stop pulsing. No state depends on an animation finishing.
 
@@ -933,7 +1097,7 @@ Reduced motion: all transitions become instant, the price tint becomes a 1 s sta
 
 Target: WCAG 2.2 AA.
 
-- **Keyboard.** Everything operable by keyboard in visual order. Skip link to main content. Type-ahead is a combobox with listbox semantics and arrow keys. Gallery viewer: arrows, Home, End, Escape. Filters: fieldsets with legends. No keyboard traps except intentional focus traps in dialogs and sheets.
+- **Keyboard.** Everything operable by keyboard in visual order. Skip link to main content. Type-ahead is a combobox with listbox semantics and arrow keys. Gallery viewer: arrows, Home, End, Escape. The featured selector on Discover is a tab list (arrow keys move, selection follows focus). Section navigation is a labelled `nav` of links with `aria-current` on the active one. Mosaic tiles are buttons named by their photo's alt text. Filters: fieldsets with legends. No keyboard traps except intentional focus traps in dialogs and sheets.
 - **Focus.** 2px ring, 2px offset, 3:1 against adjacent colours, never removed. Sticky nav and bid bar never cover the focused element (`scroll-padding` set to their heights). Focus moves to the page heading on route change, into dialogs on open, back to the trigger on close, and to the error summary on a failed multi-field submit.
 - **Contrast.** Ratios in 5.1. Text over photos always sits on a scrim that guarantees 4.5:1. Red, green and amber are never the only signal: each has a word and an icon.
 - **Screen readers.**
@@ -956,11 +1120,11 @@ Budgets (mid-range Android, 4G): LCP under 2.5 s on the lot page and Discover, C
 
 - **Images.**
   - AVIF with WebP fallback, widths 400, 800, 1200, 1600, 2400, generated at build time for the interim manifest (and by the image service later).
-  - `srcset` and `sizes` per usage: card `(min-width:1024px) 33vw, (min-width:768px) 50vw, 112px`; stage `100vw`.
+  - `srcset` and `sizes` per usage: card `(min-width:1440px) 25vw, (min-width:1024px) 33vw, (min-width:768px) 50vw, 100vw`; list thumbnail `112px`; mosaic tile `(min-width:1024px) 15vw, 50vw`; stage `100vw`.
   - Every image has an aspect-ratio box and explicit dimensions; no layout shift on load.
   - Placeholder: dominant colour from the manifest as background, optional 16px blur preview; fade to the image over 180 ms.
   - Lead photo on the lot page and the featured photo on Discover: `fetchpriority="high"`, not lazy, preloaded. Everything else `loading="lazy"` and `decoding="async"`.
-- **Gallery.** Thumbnails lazy. The viewer loads the current image plus one on each side. The viewer component is code-split and loaded on first open.
+- **Gallery.** Thumbnails and mosaic tiles lazy, each in a fixed 3:2 box; the mosaic renders at most 11 tiles until "Show all" is pressed. The viewer loads the current image plus one on each side. The viewer component is code-split and loaded on first open.
 - **Real-time.**
   - One socket per tab. Subscribe only to lots on screen in live contexts (lot page, featured, ending soon, account lists), not to every card in a grid.
   - Version check before applying. Field-level selectors so one bid updates three text nodes.
@@ -1003,7 +1167,7 @@ Each step ends in something runnable against `docker compose up` and the seeded 
 
 ### 13.1 Decisions needed from you
 
-1. **Reference images.** They did not arrive. Please attach them so section 2 can be checked against the real thing.
+1. **Categories.** Reference A shows four body-style categories (sports and exotic, classics, muscle, truck and SUV). This plan keeps two, Classic and Modern, because `item.type` also drives the lot's atmosphere. More categories are easy once the backend has a separate body or category field. Is two enough for now?
 2. **Currency.** Amounts are integers in the "smallest currency unit" with no currency stated. This plan assumes INR in paise, formatted as `₹42,00,000`, set by `VITE_CURRENCY`. Confirm.
 3. **Vehicle data.** Accept the interim convention (structured header inside `description`, `item.type` as `classic` / `modern`), or add backend fields first?
 4. **Photos.** Accept the static manifest for seeded demo lots, or build upload first? This is the largest gap between the brief and the backend: a car auction with no photos cannot look premium.
@@ -1069,8 +1233,8 @@ The skill's `--persist` option (which writes `design-system/<project>/MASTER.md`
 | Ground choices in the subject | Catalogue serif for collector lots, a width-axis grotesque for badge-like modern titles, tabular figures as instrument readouts, the extension meter derived from the engine's real anti-sniping rule |
 | Open with the most characteristic thing | Discover opens on a live lot photograph with its bid and time, not a headline |
 | Typography carries personality; two families at most, clearly distinct | Fraunces and Archivo only |
-| Avoid the tells: all-caps eyebrows, monospace data labels, middle-dot meta strings, arrows on links, single accented word, numbered markers on non-sequences, identical rounded shadowed cards, gradient washes | None are used. Numbered steps appear only in Sell, which is a real sequence. Meta facts are separated by spacing. |
-| Warm cream + serif + terracotta is a generated default | The brief explicitly asks for ivory, charcoal and muted red, so the brief wins. The plan departs from the default where it is free to: the red is a deep signal red reserved for state rather than a clay accent, the paper is the project's own existing neutral, primary actions are ink, and half the product runs on a dark stage. |
+| Avoid the tells (several of which appear in the references themselves): all-caps eyebrows, monospace data labels, middle-dot meta strings, arrows on links, single accented word, numbered markers on non-sequences, identical rounded shadowed cards, gradient washes | None are used. Numbered steps appear only in Sell, which is a real sequence. Meta facts are separated by spacing. |
+| Warm cream + serif + terracotta is a generated default | The brief explicitly asks for ivory, charcoal and muted red, so the brief wins. The plan departs from the default where it is free to: the red is the references' deep signal red reserved for state rather than a clay accent, cards are white on a light ivory ground rather than cream on cream, primary actions are ink, and half the product runs on a dark stage. |
 | Near-black + one bright accent is a generated default | Used only for the modern stage and the optional dark theme, as the brief requires |
 | Spend boldness in one place | The bid panel. Everything around it is quiet. |
 | Motion sparingly; one orchestrated moment at most | No entrance motion at all; motion only answers state changes |
