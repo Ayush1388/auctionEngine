@@ -54,11 +54,11 @@ export function LotRow({ id, title, viewAll, auctions, isError, onRetry, activeI
 
   return (
     <section aria-labelledby={id}>
-      <div className="mb-3 flex items-baseline justify-between gap-4 md:mb-4">
-        <h2 id={id} className="heading text-22 text-ink md:text-28">
+      <div className="mb-4 flex items-center justify-between gap-4 md:mb-6">
+        <h2 id={id} className="heading text-36 text-brand md:text-44">
           {title}
         </h2>
-        <Link to={viewAll.to} className="meta -my-2 inline-flex min-h-11 shrink-0 items-center text-14 text-ink underline-offset-4 hover:underline">
+        <Link to={viewAll.to} className="btn btn-line btn-sm shrink-0">
           {viewAll.label}
         </Link>
       </div>

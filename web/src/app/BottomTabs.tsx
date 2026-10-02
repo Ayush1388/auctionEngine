@@ -13,7 +13,8 @@ export function BottomTabs() {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)] md:hidden"
+      data-era="modern"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-line pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="grid grid-cols-4">
         {TABS.map(({ to, label, icon: Icon, end }) => (

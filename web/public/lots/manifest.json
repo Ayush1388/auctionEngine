@@ -1,1 +1,218 @@
-{}
+{
+  "porsche-911-1970": {
+    "photos": [
+      {
+        "src": "/lots/porsche-911-1970/lead-1280.jpg",
+        "srcset": "/lots/porsche-911-1970/lead-640.jpg 640w, /lots/porsche-911-1970/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 817,
+        "alt": "Cream 1970 Porsche 911 S on a rally road",
+        "color": "#515f52"
+      }
+    ]
+  },
+  "vw-t1-1959": {
+    "photos": [
+      {
+        "src": "/lots/vw-t1-1959/lead-1280.jpg",
+        "srcset": "/lots/vw-t1-1959/lead-640.jpg 640w, /lots/vw-t1-1959/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 853,
+        "alt": "Grey and white Volkswagen Type 2 Microbus, side view",
+        "color": "#817e78"
+      }
+    ]
+  },
+  "mercedes-280sl": {
+    "photos": [
+      {
+        "src": "/lots/mercedes-280sl/lead-1280.jpg",
+        "srcset": "/lots/mercedes-280sl/lead-640.jpg 640w, /lots/mercedes-280sl/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 952,
+        "alt": "Blue Mercedes-Benz 280 SL Pagoda roadster, front view",
+        "color": "#50585d"
+      }
+    ]
+  },
+  "sunny-pickup": {
+    "photos": [
+      {
+        "src": "/lots/sunny-pickup/lead-1280.jpg",
+        "srcset": "/lots/sunny-pickup/lead-640.jpg 640w, /lots/sunny-pickup/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 854,
+        "alt": "White Nissan Sunny Truck, front three-quarter view",
+        "color": "#51545b"
+      }
+    ]
+  },
+  "mustang-1965": {
+    "photos": [
+      {
+        "src": "/lots/mustang-1965/lead-1280.jpg",
+        "srcset": "/lots/mustang-1965/lead-640.jpg 640w, /lots/mustang-1965/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 960,
+        "alt": "Black 1965 Ford Mustang GT Fastback on grass",
+        "color": "#717d5f"
+      }
+    ]
+  },
+  "honda-nsx-1991": {
+    "photos": [
+      {
+        "src": "/lots/honda-nsx-1991/lead-1280.jpg",
+        "srcset": "/lots/honda-nsx-1991/lead-640.jpg 640w, /lots/honda-nsx-1991/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 853,
+        "alt": "Red Honda NSX in a museum hall",
+        "color": "#744d4a"
+      }
+    ]
+  },
+  "jaguar-etype-1967": {
+    "photos": [
+      {
+        "src": "/lots/jaguar-etype-1967/lead-1280.jpg",
+        "srcset": "/lots/jaguar-etype-1967/lead-640.jpg 640w, /lots/jaguar-etype-1967/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 591,
+        "alt": "Red Jaguar E-Type Series 1 roadster, side view",
+        "color": "#ab837b"
+      }
+    ]
+  },
+  "bmw-m3-e30-1988": {
+    "photos": [
+      {
+        "src": "/lots/bmw-m3-e30-1988/lead-1280.jpg",
+        "srcset": "/lots/bmw-m3-e30-1988/lead-640.jpg 640w, /lots/bmw-m3-e30-1988/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 855,
+        "alt": "Black BMW M3 E30, rear view",
+        "color": "#838668"
+      }
+    ]
+  },
+  "corvette-1963": {
+    "photos": [
+      {
+        "src": "/lots/corvette-1963/lead-1280.jpg",
+        "srcset": "/lots/corvette-1963/lead-640.jpg 640w, /lots/corvette-1963/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 960,
+        "alt": "1963 Chevrolet Corvette Sting Ray convertible",
+        "color": "#6b6658"
+      }
+    ]
+  },
+  "fiat-500-1969": {
+    "photos": [
+      {
+        "src": "/lots/fiat-500-1969/lead-1280.jpg",
+        "srcset": "/lots/fiat-500-1969/lead-640.jpg 640w, /lots/fiat-500-1969/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 828,
+        "alt": "Dark grey Fiat 500 L, rear three-quarter view",
+        "color": "#7d6f54"
+      }
+    ]
+  },
+  "ferrari-sf90": {
+    "photos": [
+      {
+        "src": "/lots/ferrari-sf90/lead-1280.jpg",
+        "srcset": "/lots/ferrari-sf90/lead-640.jpg 640w, /lots/ferrari-sf90/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 960,
+        "alt": "Yellow Ferrari SF90 Stradale at a show",
+        "color": "#4e5127"
+      }
+    ]
+  },
+  "mclaren-720s": {
+    "photos": [
+      {
+        "src": "/lots/mclaren-720s/lead-1280.jpg",
+        "srcset": "/lots/mclaren-720s/lead-640.jpg 640w, /lots/mclaren-720s/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 720,
+        "alt": "Silver McLaren 720S, front three-quarter view",
+        "color": "#4c4844"
+      }
+    ]
+  },
+  "porsche-gt3-992": {
+    "photos": [
+      {
+        "src": "/lots/porsche-gt3-992/lead-1280.jpg",
+        "srcset": "/lots/porsche-gt3-992/lead-640.jpg 640w, /lots/porsche-gt3-992/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 607,
+        "alt": "Orange Porsche 911 GT3 (992), rear three-quarter view",
+        "color": "#715f6a"
+      }
+    ]
+  },
+  "lamborghini-huracan": {
+    "photos": [
+      {
+        "src": "/lots/lamborghini-huracan/lead-1280.jpg",
+        "srcset": "/lots/lamborghini-huracan/lead-640.jpg 640w, /lots/lamborghini-huracan/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 761,
+        "alt": "Grey Lamborghini Huracán Performante, front three-quarter view",
+        "color": "#696b65"
+      }
+    ]
+  },
+  "ferrari-f8": {
+    "photos": [
+      {
+        "src": "/lots/ferrari-f8/lead-1280.jpg",
+        "srcset": "/lots/ferrari-f8/lead-640.jpg 640w, /lots/ferrari-f8/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 853,
+        "alt": "Blue Ferrari F8 Tributo, rear three-quarter view",
+        "color": "#636d7f"
+      }
+    ]
+  },
+  "mclaren-artura": {
+    "photos": [
+      {
+        "src": "/lots/mclaren-artura/lead-1280.jpg",
+        "srcset": "/lots/mclaren-artura/lead-640.jpg 640w, /lots/mclaren-artura/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 692,
+        "alt": "Lime green McLaren Artura, front three-quarter view",
+        "color": "#626152"
+      }
+    ]
+  },
+  "nissan-gtr-nismo": {
+    "photos": [
+      {
+        "src": "/lots/nissan-gtr-nismo/lead-1280.jpg",
+        "srcset": "/lots/nissan-gtr-nismo/lead-640.jpg 640w, /lots/nissan-gtr-nismo/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 960,
+        "alt": "Grey Nissan GT-R Nismo on a show stand",
+        "color": "#6f6562"
+      }
+    ]
+  },
+  "audi-r8-v10": {
+    "photos": [
+      {
+        "src": "/lots/audi-r8-v10/lead-1280.jpg",
+        "srcset": "/lots/audi-r8-v10/lead-640.jpg 640w, /lots/audi-r8-v10/lead-1280.jpg 1280w",
+        "width": 1280,
+        "height": 532,
+        "alt": "Blue Audi R8 V10 plus, front three-quarter view",
+        "color": "#517c8f"
+      }
+    ]
+  }
+}

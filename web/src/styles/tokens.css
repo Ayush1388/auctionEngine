@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@fontsource-variable/fraunces/opsz.css";
+@import "@fontsource/koulen/400.css";
 @import "@fontsource-variable/archivo/wdth.css";
 
 /*
@@ -7,7 +7,7 @@
  * never raw hex values. Paper is the light theme and the default; Carbon is
  * the dark theme, switched with data-theme="dark" on <html>.
  */
-@theme {
+@theme inline {
   --breakpoint-*: initial;
   --breakpoint-md: 48rem; /* 768 */
   --breakpoint-lg: 64rem; /* 1024 */
@@ -28,11 +28,12 @@
   --color-live: var(--live);
   --color-success: var(--success);
   --color-warning: var(--warning);
-  --color-stage-dark: #070708;
-  --color-stage-ink: #f2f0eb;
+  --color-brand: var(--brand);
+  --color-stage-dark: #050506;
+  --color-stage-ink: #f5f3ee;
   --color-transparent: transparent;
 
-  --font-serif: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-display: "Koulen", "Archivo Variable", Impact, "Arial Narrow", sans-serif;
   --font-sans: "Archivo Variable", Arial, system-ui, sans-serif;
 
   /* Type scale: 12, 13, 14, 16, 18, 20, 22, 28, 36, 44. Nothing else. */
@@ -47,6 +48,7 @@
   --text-28: 1.75rem;
   --text-36: 2.25rem;
   --text-44: 2.75rem;
+  --text-display: clamp(2.75rem, 8.2vw, 6rem);
 
   --radius-*: initial;
   --radius-card: 2px;
@@ -62,44 +64,57 @@
 }
 
 :root,
-:root[data-theme="light"] {
-  --bg: #f4f3ec;
-  --bg-secondary: #e8e6de;
-  --surface: #ffffff;
+:root[data-theme="light"],
+[data-era="classic"] {
+  /* Vintage: cream, red, black (the heritage reference). */
+  --bg: #f8faed;
+  --bg-secondary: #edefdc;
+  --surface: #fcfdf6;
   --surface-elevated: #ffffff;
-  --text: #14130f;
-  --text-secondary: #45433d;
-  --text-muted: #66635b;
-  --border: #d3d0c6;
-  --border-strong: #7c786d;
-  --action: #14130f;
-  --on-action: #f4f3ec;
+  --text: #000101;
+  --text-secondary: #2d2c27;
+  --text-muted: #5b594f;
+  --border: #cdcdbb;
+  --border-strong: #000101;
+  --action: #000101;
+  --on-action: #f8faed;
+  --brand: #ad221d;
   --live: #ad221d;
   --success: #1d6a43;
   --warning: #855400;
-  --card-outline: var(--border);
-  --shadow-overlay-value: 0 8px 24px rgb(20 19 15 / 0.14);
+  --card-outline: #000101;
+  --photo-filter: sepia(0.1) contrast(1.02) saturate(1.04);
+  --shadow-overlay-value: 0 8px 24px rgb(0 1 1 / 0.18);
   color-scheme: light;
 }
 
-:root[data-theme="dark"] {
-  --bg: #101113;
-  --bg-secondary: #17191c;
-  --surface: #1c1f23;
-  --surface-elevated: #262a2f;
-  --text: #f2f0eb;
-  --text-secondary: #b8b5ad;
-  --text-muted: #9d9a92;
-  --border: #30343a;
-  --border-strong: #737882;
-  --action: #f2f0eb;
-  --on-action: #101113;
-  --live: #f4665d;
+:root[data-theme="dark"],
+[data-era="modern"] {
+  /* Supercar: black stage, crimson accent, white type (the performance reference). */
+  --bg: #050506;
+  --bg-secondary: #101012;
+  --surface: #0b0b0d;
+  --surface-elevated: #1a1a1e;
+  --text: #f5f3ee;
+  --text-secondary: #c4c1b9;
+  --text-muted: #a09d95;
+  --border: #2b2b30;
+  --border-strong: #6a6a72;
+  --action: #d3202f;
+  --on-action: #ffffff;
+  --brand: #ffffff;
+  --live: #ff5562;
   --success: #4fc48c;
   --warning: #e3a63a;
-  --card-outline: transparent;
-  --shadow-overlay-value: 0 8px 24px rgb(0 0 0 / 0.5);
+  --card-outline: #2b2b30;
+  --photo-filter: contrast(1.06) saturate(1.06);
+  --shadow-overlay-value: 0 8px 24px rgb(0 0 0 / 0.6);
   color-scheme: dark;
+}
+
+[data-era] {
+  background: var(--bg);
+  color: var(--text);
 }
 
 @layer base {
@@ -126,6 +141,7 @@
 
   :focus-visible {
     outline: 2px solid var(--text);
+    box-shadow: 0 0 0 4px var(--bg);
     outline-offset: 2px;
   }
 
@@ -137,53 +153,106 @@
 }
 
 @layer components {
-  /* Lot title, classic voice: catalogue serif, written case. */
+  /* Display titles. Classic: Koulen in the brand red. Modern: wide white sans, like a badge on the car. */
   .title-classic {
-    font-family: var(--font-serif);
+    font-family: var(--font-display);
     font-weight: 400;
-    font-variation-settings: "SOFT" 0, "WONK" 0;
-    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    letter-spacing: 0.005em;
+    color: var(--brand);
   }
 
-  /* Lot title, modern voice: wide uppercase sans, like a badge on the car. */
   .title-modern {
     font-family: var(--font-sans);
-    font-weight: 700;
-    font-stretch: 112%;
+    font-weight: 800;
+    font-stretch: 118%;
     text-transform: uppercase;
     letter-spacing: -0.01em;
+    color: var(--brand);
   }
 
   .heading {
-    font-family: var(--font-serif);
-    font-weight: 500;
-    line-height: 1.2;
+    font-family: var(--font-display);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    line-height: 1.05;
   }
 
-  /* Labels, spec rows, tags: condensed sans, sentence case. */
+  /* Small list titles: Koulen's narrow 1 reads as I at this size, so use a condensed sans. */
+  .heading-compact {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-stretch: 78%;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    line-height: 1.15;
+  }
+
+  /* Labels, spec rows, tags. */
   .meta {
     font-family: var(--font-sans);
     font-weight: 500;
-    font-stretch: 88%;
+    font-stretch: 92%;
     line-height: 1.35;
   }
 
   /* Bids, countdowns, balances: figures that align in columns. */
   .figure {
     font-family: var(--font-sans);
-    font-weight: 600;
-    font-stretch: 100%;
+    font-weight: 700;
+    font-stretch: 96%;
     font-variant-numeric: tabular-nums lining-nums;
     white-space: nowrap;
   }
 
   .wordmark {
-    font-family: var(--font-sans);
-    font-weight: 800;
-    font-stretch: 70%;
+    font-family: var(--font-display);
+    font-weight: 400;
     text-transform: uppercase;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.04em;
     line-height: 1;
+  }
+
+  /* One button shape for both eras; the colours come from the era tokens. */
+  .btn {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    padding: 0 1.5rem;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-stretch: 92%;
+    font-size: 1rem;
+    white-space: nowrap;
+    transition: background-color 120ms, color 120ms, border-color 120ms;
+  }
+  .btn-sm {
+    min-height: 2.25rem;
+    padding: 0 1rem;
+    font-size: 0.875rem;
+  }
+  .btn-solid {
+    background: var(--action);
+    color: var(--on-action);
+    border: 1px solid var(--action);
+  }
+  .btn-solid:hover {
+    filter: brightness(1.12);
+  }
+  .btn-line {
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+  }
+  .btn-line:hover {
+    background: var(--text);
+    color: var(--bg);
+  }
+
+  .photo-tone {
+    filter: var(--photo-filter);
   }
 
   .skeleton {

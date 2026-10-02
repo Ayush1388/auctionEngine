@@ -24,7 +24,7 @@ export function AppShell() {
     <div className="flex min-h-dvh flex-col">
       <a
         href="#main"
-        className="meta sr-only z-50 rounded-control bg-action px-4 py-3 text-16 text-on-action focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+        className="meta sr-only z-50 rounded-full bg-action px-4 py-3 text-16 text-on-action focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
       >
         Skip to main content
       </a>

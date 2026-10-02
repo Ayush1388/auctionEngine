@@ -11,7 +11,7 @@ export function NotBuiltYet() {
       </p>
       <Link
         to="/"
-        className="meta mt-6 inline-flex min-h-11 items-center rounded-control bg-action px-5 text-16 text-on-action transition-opacity duration-[120ms] hover:opacity-85"
+        className="btn btn-solid mt-6"
       >
         Back to Discover
       </Link>

@@ -32,7 +32,7 @@ export function LotCard({ lot, layout, active = false, sizes = GRID_SIZES }: Lot
       <article className="relative flex gap-3 py-3">
         <LotPhoto lot={lot} variant="thumb" sizes="112px" className="h-[75px] w-28 shrink-0 rounded-card" />
         <div className="flex min-w-0 flex-1 flex-col justify-between gap-1">
-          <h3 className="heading line-clamp-2 text-16 text-ink">
+          <h3 className="heading-compact line-clamp-2 text-16 text-ink">
             <Link to={href} className="after:absolute after:inset-0 hover:underline">
               {lot.title}
             </Link>
@@ -50,11 +50,11 @@ export function LotCard({ lot, layout, active = false, sizes = GRID_SIZES }: Lot
   }
 
   return (
-    <article className="relative flex h-full flex-col overflow-hidden rounded-card border border-[var(--card-outline)] bg-surface">
+    <article data-era={lot.era} className="relative flex h-full flex-col overflow-hidden rounded-card border border-[var(--card-outline)]">
       <div className="relative border-b border-line">
         <LotPhoto lot={lot} variant="card" sizes={sizes} className="aspect-[3/2] w-full" />
         {figures.tag && (
-          <p className="meta absolute left-3 top-3 flex items-center gap-1.5 rounded-card bg-elevated px-2 py-1 text-12 text-ink">
+          <p className="meta absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1 text-12 text-ink">
             {figures.urgent && <span aria-hidden="true" className="size-1.5 rounded-full bg-live" />}
             {figures.tag}
           </p>
@@ -74,7 +74,7 @@ export function LotCard({ lot, layout, active = false, sizes = GRID_SIZES }: Lot
           </div>
         </div>
 
-        <h3 className="heading mt-1 line-clamp-2 min-h-[2.4em] text-18 text-ink">
+        <h3 className={`mt-1 line-clamp-2 ${lot.era === "modern" ? "title-modern min-h-[2.3em] text-16 leading-[1.15]" : "title-classic min-h-[2.1em] text-28 leading-[1.05]"}`}>
           <Link to={href} className="after:absolute after:inset-0 hover:underline">
             {lot.title}
           </Link>
@@ -95,11 +95,11 @@ export function LotCard({ lot, layout, active = false, sizes = GRID_SIZES }: Lot
       <div className="mt-auto flex items-end justify-between gap-4 border-t border-line bg-bg-secondary px-4 py-3">
         <div className="min-w-0">
           <p className="meta truncate text-12 text-muted">{figures.leftLabel}</p>
-          <p className={`figure text-20 leading-tight ${figures.leftMuted ? "text-muted" : "text-ink"}`}>{figures.leftFigure}</p>
+          <p className={`figure text-22 leading-tight ${figures.leftMuted ? "text-muted" : "text-ink"}`}>{figures.leftFigure}</p>
         </div>
         <div className="shrink-0 text-right">
           <p className="meta text-12 text-muted">{figures.rightLabel}</p>
-          <TimeFigure figures={figures} className="text-20 leading-tight" />
+          <TimeFigure figures={figures} className="text-22 leading-tight" />
         </div>
       </div>
     </article>

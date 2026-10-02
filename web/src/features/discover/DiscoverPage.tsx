@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router";
+import { type Era, toLot } from "../../domain/lot";
 import { useLiveAuctions } from "../../realtime/socket";
 import { InlineError } from "../../ui/InlineError";
 import { Skeleton } from "../../ui/Skeleton";
-import { CategoryTiles } from "./CategoryTiles";
 import { EndingSoonList } from "./EndingSoonList";
 import { FeaturedLot } from "./FeaturedLot";
 import { LotRow } from "./LotRow";
@@ -41,14 +41,6 @@ export function DiscoverPage() {
   }
   const selected = featured?.find((auction) => auction.id === selectedId) ?? featured?.[0];
 
-  // Newly listed skips lots already shown in the row above when enough remain.
-  const newlyListed = useMemo(() => {
-    if (!activeLots) return undefined;
-    const shown = new Set(trendingLots?.slice(0, 4).map((auction) => auction.id));
-    const fresh = activeLots.filter((auction) => !shown.has(auction.id));
-    return fresh.length >= 2 ? fresh : activeLots;
-  }, [activeLots, trendingLots]);
-
   // Live updates for what is on screen in the top block only (at most 6).
   const liveIds = useMemo(() => {
     const ids = new Set<string>();
@@ -61,23 +53,20 @@ export function DiscoverPage() {
   const topFailed = active.isError && !activeLots && (trending.isError || !trendingLots?.length);
   const nothingLive = activeLots?.length === 0 && (!trendingLots || trendingLots.length === 0);
 
-  const startingSoon = (
-    <LotRow
-      id="starting-soon-heading"
-      title="Starting soon"
-      viewAll={{ to: "/auctions?status=starting-soon", label: "View all" }}
-      auctions={scheduled.data?.auctions}
-      isError={scheduled.isError}
-      onRetry={() => void scheduled.refetch()}
-    />
-  );
+  // One section per era, most-bid first. Each section takes its era's theme;
+  // the cards inside are the same component either way.
+  const byEra = (era: Era) => activeLots?.filter((auction) => toLot(auction).era === era).sort((x, y) => y.bid_count - x.bid_count);
+  const classics = useMemo(() => byEra("classic"), [activeLots]); // eslint-disable-line react-hooks/exhaustive-deps
+  const supercars = useMemo(() => byEra("modern"), [activeLots]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const heroEra: Era = selected ? toLot(selected).era : "classic";
 
   return (
-    <div className="mx-auto w-full max-w-[1384px] px-4 pb-16 md:px-6 lg:px-8">
+    <>
       <h1 className="sr-only">Live collector car auctions</h1>
 
-      {topFailed ? (
-        <div className="pt-6">
+      <Band era={heroEra} className="pt-6 pb-10 md:pt-10 md:pb-14">
+        {topFailed ? (
           <InlineError
             message="Could not load auctions."
             onRetry={() => {
@@ -85,77 +74,85 @@ export function DiscoverPage() {
               void trending.refetch();
             }}
           />
-        </div>
-      ) : nothingLive ? (
-        <div className="space-y-12 pt-8">
-          <div>
-            <h2 className="heading text-28 text-ink">No auctions are live right now</h2>
-            <p className="mt-2 max-w-[60ch] text-16 text-ink-2">
+        ) : nothingLive ? (
+          <div className="py-6 md:py-10">
+            <h2 className="title-classic text-display leading-[0.94]">No auctions are live right now</h2>
+            <p className="mt-4 max-w-[60ch] text-16 text-ink-2">
               New lots open for bidding at their start time. You can also list a car of your own.
             </p>
-            <Link
-              to="/sell"
-              className="meta mt-4 inline-flex min-h-11 items-center rounded-control bg-action px-5 text-16 text-on-action transition-opacity duration-[120ms] hover:opacity-85"
-            >
+            <Link to="/sell" className="btn btn-solid mt-6">
               Sell a car
             </Link>
           </div>
-          {startingSoon}
-        </div>
-      ) : (
-        <div className="grid gap-x-6 gap-y-8 md:pt-6 lg:grid-cols-12">
-          <div className="min-w-0 lg:col-span-8">
-            {featured && selected ? (
-              <FeaturedLot auctions={featured} since={featuredSince} selectedId={selected.id} onSelect={setSelectedId} />
-            ) : (
-              <FeaturedSkeleton />
-            )}
+        ) : (
+          <div className="grid gap-x-8 gap-y-8 lg:grid-cols-12">
+            <div className="min-w-0 lg:col-span-8">
+              {featured && selected ? (
+                <FeaturedLot auctions={featured} since={featuredSince} selectedId={selected.id} onSelect={setSelectedId} />
+              ) : (
+                <FeaturedSkeleton />
+              )}
+            </div>
+            <div className="min-w-0 lg:col-span-4">
+              {endingSoon ? (
+                endingSoon.length > 0 && <EndingSoonList auctions={endingSoon} since={active.dataUpdatedAt} />
+              ) : active.isError ? (
+                <InlineError message="Could not load auctions ending soon." onRetry={() => void active.refetch()} />
+              ) : (
+                <EndingSoonSkeleton />
+              )}
+            </div>
           </div>
-          <div className="min-w-0 lg:col-span-4">
-            {endingSoon ? (
-              endingSoon.length > 0 && <EndingSoonList auctions={endingSoon} since={active.dataUpdatedAt} />
-            ) : active.isError ? (
-              <InlineError message="Could not load auctions ending soon." onRetry={() => void active.refetch()} />
-            ) : (
-              <EndingSoonSkeleton />
-            )}
-          </div>
-        </div>
-      )}
+        )}
+      </Band>
 
-      <div className="mt-8 border-y border-line py-4 md:mt-10">
-        <CategoryTiles />
-      </div>
-
-      <div className="mt-8 space-y-8 md:mt-12 md:space-y-12">
-        {!nothingLive && (
-          <>
-            {!topFailed && (
-            <>
+      {!nothingLive && !topFailed && (
+        <>
+          {(!classics || classics.length > 0) && (
+            <Band era="classic" className="border-t border-line-strong py-10 md:py-14">
               <LotRow
-                id="most-active-heading"
-                title="Most active now"
-                viewAll={{ to: "/auctions?status=live&sort=bids", label: "View all live auctions" }}
-                auctions={trendingLots}
-                isError={trending.isError}
-                onRetry={() => void trending.refetch()}
-                activeIds={activeIds}
-              />
-              <LotRow
-                id="newly-listed-heading"
-                title="Newly listed"
-                viewAll={{ to: "/auctions?status=live", label: "View all" }}
-                auctions={newlyListed}
+                id="classics-heading"
+                title="Classics"
+                viewAll={{ to: "/auctions?type=classic", label: "View all classics" }}
+                auctions={classics}
                 isError={active.isError}
                 onRetry={() => void active.refetch()}
                 activeIds={activeIds}
               />
-            </>
+            </Band>
           )}
-            {startingSoon}
-          </>
-        )}
-        <LotRow
+          {(!supercars || supercars.length > 0) && (
+            <Band era="modern" className="border-t border-line py-10 md:py-14">
+              <LotRow
+                id="supercars-heading"
+                title="Supercars"
+                viewAll={{ to: "/auctions?type=modern", label: "View all supercars" }}
+                auctions={supercars}
+                isError={active.isError}
+                onRetry={() => void active.refetch()}
+                activeIds={activeIds}
+              />
+            </Band>
+          )}
+        </>
+      )}
+
+      {(scheduled.isError || !scheduled.data || scheduled.data.auctions.length > 0) && (
+        <Band era="classic" className="border-t border-line-strong py-10 md:py-14">
+          <LotRow
+            id="starting-soon-heading"
+            title="Starting soon"
+            viewAll={{ to: "/auctions?status=starting-soon", label: "View all" }}
+            auctions={scheduled.data?.auctions}
+            isError={scheduled.isError}
+            onRetry={() => void scheduled.refetch()}
+          />
+        </Band>
+      )}
+
+      {(sold.isError || !sold.data || sold.data.auctions.length > 0) && (
+        <Band era="modern" className="border-t border-line py-10 md:py-14">
+          <LotRow
             id="recently-sold-heading"
             title="Recently sold"
             viewAll={{ to: "/auctions?status=sold", label: "View all" }}
@@ -163,7 +160,17 @@ export function DiscoverPage() {
             isError={sold.isError}
             onRetry={() => void sold.refetch()}
           />
-      </div>
+        </Band>
+      )}
+    </>
+  );
+}
+
+/** A full-width field in one era's theme, with the page's content column inside. */
+function Band({ era, className = "", children }: { era: Era; className?: string; children: ReactNode }) {
+  return (
+    <div data-era={era} className={className}>
+      <div className="mx-auto w-full max-w-[1384px] px-4 md:px-6 lg:px-8">{children}</div>
     </div>
   );
 }

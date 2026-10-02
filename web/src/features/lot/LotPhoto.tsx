@@ -49,7 +49,7 @@ export function LotPhoto({ lot, sizes, variant, priority = false, className = ""
           fetchPriority={priority ? "high" : "auto"}
           onLoad={() => setLoaded(true)}
           onError={() => setFailed(true)}
-          className={`absolute inset-0 size-full object-cover transition-opacity duration-[180ms] ${loaded ? "opacity-100" : "opacity-0"}`}
+          className={`photo-tone absolute inset-0 size-full object-cover transition-opacity duration-[180ms] ${loaded ? "opacity-100" : "opacity-0"}`}
         />
       </div>
     );

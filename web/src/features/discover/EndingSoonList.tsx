@@ -7,8 +7,8 @@ import { LotCard } from "../lot/LotCard";
 export function EndingSoonList({ auctions, since }: { auctions: Auction[]; since: number }) {
   return (
     <section aria-labelledby="ending-soon-heading" className="flex h-full flex-col">
-      <div className="flex items-baseline justify-between gap-4 border-b border-line pb-2">
-        <h2 id="ending-soon-heading" className="heading text-22 text-ink">
+      <div className="flex items-baseline justify-between gap-4 border-b border-line-strong pb-2">
+        <h2 id="ending-soon-heading" className="heading text-28 text-brand">
           Ending soon
         </h2>
         <Link to="/auctions?status=live&sort=ending" className="meta -my-2 inline-flex min-h-11 items-center text-14 text-ink underline-offset-4 hover:underline">
