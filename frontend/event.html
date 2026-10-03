@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | Event</title>
+  <meta name="description" content="Live vintage car auction event.">
+  <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="event.css">
+</head>
+<body>
+<main>
+  <section class="ev-hero" id="evHero">
+    <img class="ev-hero-img" id="evImg" src="" alt="">
+    <header class="ev-bar">
+      <a class="brand" href="index.html" aria-label="Marque home"><svg viewBox="0 0 40 32" width="46" height="38" aria-hidden="true"><path fill="currentColor" d="M0 14 8 0h24l8 14-6 4-5-9H11l-5 9zM6 24l6-4h16l6 4-4 8H10z"/></svg></a>
+      <nav class="ev-nav" aria-label="Primary">
+        <a href="index.html#classic">Classics</a><a href="index.html#muscle">Muscle</a><a href="index.html#events">All events</a><a href="index.html#sell">Sell a car</a><a href="index.html#how">How it works</a>
+      </nav>
+      <div class="ev-actions">
+        <button class="mode" id="modeToggle" role="switch" aria-checked="false" aria-label="Noir mode"><span class="mono mode-label">Noir</span><span class="mode-track"><span class="mode-knob"></span></span></button>
+        <a class="pill pill-solid" href="#join">Join now</a>
+      </div>
+    </header>
+    <div class="ev-hero-copy">
+      <a class="ev-back mono" href="index.html#events">Back to events</a>
+      <p class="mono" id="evKicker"></p>
+      <h1 id="evTitle"></h1>
+      <p class="ev-dates" id="evDates"></p>
+      <p class="ev-intro" id="evIntro"></p>
+      <div class="ev-cta">
+        <a class="btn" href="#block">View auctions</a>
+        <a class="btn btn-ghost" href="#experience">Event details</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="ev-facts" aria-label="Event facts" id="evFacts"></section>
+
+  <section class="ev-exp" id="experience">
+    <div class="ev-exp-head"><h2 id="expTitle"></h2><p id="expLead"></p></div>
+    <div class="x" id="x"></div>
+  </section>
+
+  <section class="ev-feature" id="evFeature">
+    <div class="ev-feature-copy">
+      <p class="mono" id="ftKicker"></p>
+      <h2 id="ftTitle"></h2>
+      <p class="ev-feature-meta mono" id="ftMeta"></p>
+      <p id="ftText"></p>
+      <dl class="ev-feature-stats">
+        <div><dt>Current bid</dt><dd id="ftBid"></dd></div>
+        <div><dt>Bids</dt><dd id="ftBids"></dd></div>
+        <div><dt>Time remaining</dt><dd id="ftTime" class="time"></dd></div>
+      </dl>
+      <a class="btn" href="#block">View lot</a>
+    </div>
+    <div class="ev-feature-photo"><img id="ftImg" src="" alt=""></div>
+  </section>
+
+  <section class="ev-block" id="block">
+    <div class="ev-block-head">
+      <h2>Cars on the Block</h2>
+      <p id="blockLead"></p>
+    </div>
+    <div class="grid" id="evGrid"></div>
+  </section>
+
+  <section class="ev-more">
+    <h2>Other events</h2>
+    <ul id="moreList"></ul>
+  </section>
+</main>
+
+<footer class="footer" id="join">
+  <div class="footer-top">
+    <h2 class="wordmark small">MARQUE</h2>
+    <div class="footer-cols">
+      <nav aria-label="Auctions"><h3 class="mono">Auctions</h3><ul><li><a href="index.html#classic">Classic legends</a></li><li><a href="index.html#muscle">Midnight muscle</a></li><li><a href="index.html#events">Upcoming events</a></li></ul></nav>
+      <nav aria-label="Company"><h3 class="mono">Marque</h3><ul><li><a href="index.html#sell">Sell a car</a></li><li><a href="index.html#how">How it works</a></li><li><a href="#join">Contact</a></li></ul></nav>
+      <form class="join-form" onsubmit="return false"><label class="mono" for="email">Auction alerts</label><div><input id="email" type="email" placeholder="you@email.com" autocomplete="email"><button class="btn" type="submit">Join now</button></div></form>
+    </div>
+  </div>
+  <div class="footer-bottom"><p class="mono">© 2026 Marque Auctions. Bid responsibly.</p><p class="mono"><a href="#join">Terms</a> &nbsp; <a href="#join">Privacy</a> &nbsp; <a href="#join">Buyer’s guide</a></p></div>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="torn" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="event.js"></script>
+<script src="motion.js"></script>
+</body>
+</html>
