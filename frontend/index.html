@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | Vintage Car Auctions</title>
+  <meta name="description" content="Live online auctions for classic, vintage and muscle cars. Bid in real time.">
+  <script>
+    // Apply the saved theme before first paint so there is no flash.
+    try { var t = localStorage.getItem("marque-theme"); if (t === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main id="top">
+  <!-- HERO: compact cream panel (nav, wordmark, awards, controls) over a full-bleed photo -->
+  <section class="hero">
+    <div class="panel">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="Marque home">
+          <svg viewBox="0 0 40 32" width="46" height="38" aria-hidden="true"><path fill="currentColor" d="M0 14 8 0h24l8 14-6 4-5-9H11l-5 9zM6 24l6-4h16l6 4-4 8H10z"/></svg>
+        </a>
+
+        <nav class="nav" aria-label="Primary">
+          <ul>
+            <li><a href="#classic">Classics</a></li>
+            <li><a href="#muscle">Muscle</a></li>
+            <li><a href="#events">Events</a></li>
+            <li><a href="#sell">Sell a car</a></li>
+            <li><a href="#how">How it works</a></li>
+          </ul>
+        </nav>
+
+        <div class="actions">
+          <button class="mode" id="modeToggle" role="switch" aria-checked="false" aria-label="Noir mode">
+            <span class="mono mode-label">Noir</span>
+            <span class="mode-track"><span class="mode-knob"></span></span>
+          </button>
+          <button class="burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><i></i><i></i></button>
+        </div>
+      </header>
+
+      <h1 class="wordmark">MARQUE</h1>
+
+      <ul class="awards" aria-label="Recognition">
+        <li><span class="medal">1</span><em>2025</em> “ Most trusted marketplace ”</li>
+        <li><span class="medal">2</span><em>2024</em> “ Fastest settlement ”</li>
+        <li><span class="medal">3</span><em>2022</em> “ Collector’s choice ”</li>
+      </ul>
+
+      <div class="controls">
+        <div class="arrows">
+          <button class="arrow" id="prev" aria-label="Previous car">‹</button>
+          <button class="arrow" id="next" aria-label="Next car">›</button>
+        </div>
+        <span class="mono">2026 Season</span>
+        <span class="mono" id="slideName">A noir icon</span>
+        <span class="mono timer" id="heroClock" aria-label="Time until next gavel">00 : 00 : 00 : 00</span>
+        <a class="pill" href="#join">Join now</a>
+      </div>
+    </div>
+
+    <div class="stage">
+      <img class="stage-img" id="stageImg" src="assets/hero.jpg" alt="Black 1963 Chevrolet Impala lowrider parked at dusk with amber headlights glowing" fetchpriority="high">
+      <ol class="thumbs" id="thumbs" aria-label="Featured lots">
+        <li><button data-slide="1" aria-label="Show 1951 Pontiac Chieftain"><img src="assets/ivan.jpg" alt=""></button></li>
+        <li><button data-slide="2" aria-label="Show Excalibur roadster"><img src="assets/doina.jpg" alt=""></button></li>
+        <li><button data-slide="3" aria-label="Show 1965 Ford Mustang"><img src="assets/theodor.jpg" alt=""></button></li>
+      </ol>
+      <div class="stage-info">
+        <p class="mono" id="slideLot">Lot 001, no reserve</p>
+        <h2 id="slideTitle">1963 Chevrolet Impala SS</h2>
+        <p class="stage-bid"><span class="mono">Current bid</span> <strong id="slideBid">$42,500</strong>
+          <a class="btn" href="#classic-lots">Place a bid</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Drawer opened by the hamburger -->
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <button class="drawer-close" id="drawerClose" aria-label="Close menu">×</button>
+    <form class="search" role="search" onsubmit="return false">
+      <input type="search" placeholder="Search makes, models, lots" aria-label="Search lots">
+    </form>
+    <ul>
+      <li><a href="#classic">Classic legends</a></li>
+      <li><a href="#muscle">Midnight muscle</a></li>
+      <li><a href="#events">Upcoming events</a></li>
+      <li><a href="#sell">Sell a car</a></li>
+      <li><a href="#join">Sign in</a></li>
+    </ul>
+    <a class="pill pill-solid" href="#join">Join now</a>
+  </aside>
+
+  <section class="stats" aria-label="Marketplace figures">
+    <div><b data-count="300" data-suffix="+">0</b><span class="mono">Live auctions</span></div>
+    <div><b data-count="50" data-suffix="K+">0</b><span class="mono">Registered bidders</span></div>
+    <div><b data-count="40" data-suffix="+">0</b><span class="mono">Countries</span></div>
+    <div><b data-count="120" data-prefix="$" data-suffix="M+">0</b><span class="mono">Cars sold</span></div>
+  </section>
+
+  <!-- CLASSICS: photo fades into the page on its right edge -->
+  <section class="band band-light" id="classic">
+    <div class="band-photo"><img src="assets/doina.jpg" alt="Red Excalibur roadster with side-mounted exhaust pipes" loading="lazy"></div>
+    <div class="band-copy">
+      <h2>Classic Legends</h2>
+      <p>Pre-war icons and golden-era masterpieces. Cars that defined a generation.</p>
+      <a class="btn btn-ink" href="#classic-lots">Browse classics</a>
+    </div>
+  </section>
+  <section class="lots" id="classic-lots" aria-label="Classic lots"><div class="grid" id="classicGrid"></div></section>
+
+  <!-- MIDNIGHT MUSCLE: black-paint American muscle. Photo fades into black on its left edge -->
+  <section class="band band-light band-flip" id="muscle">
+    <div class="band-copy">
+      <h2>Midnight Muscle</h2>
+      <p>Black paint, chrome and big-block V8s. The cars you hear before you see.</p>
+      <a class="btn btn-ink" href="#muscle-lots">Browse muscle</a>
+    </div>
+    <div class="band-photo"><img src="assets/camaro.jpg" alt="Black 1967 Chevrolet Camaro SS convertible with white stripes in a tree-lined park" loading="lazy"></div>
+  </section>
+  <section class="lots" id="muscle-lots" aria-label="Midnight Muscle lots"><div class="grid" id="muscleGrid"></div></section>
+
+  <!-- EVENTS -->
+  <section class="events" id="events">
+    <div class="head">
+      <h2>Upcoming Auctions</h2>
+      <p>Live sales held alongside the world’s great concours and shows. Register once to bid at every one.</p>
+    </div>
+
+    <ul class="event-list">
+      <li>
+        <a class="event" href="event.html?e=retromobile">
+          <div class="event-photo"><img src="assets/events/retromobile.jpg" alt="1921 Bentley 3 Litre racing car on display at Rétromobile in Paris" loading="lazy"></div>
+          <div class="event-main">
+            <h3>Rétromobile Paris</h3>
+            <p class="event-where">Paris Expo, France</p>
+            <p class="event-blurb">Pre-war racers and postwar coachbuilt rarities in a single hall.</p>
+          </div>
+          <dl class="event-facts">
+            <div><dt>Date</dt><dd>Feb 3 to 7, 2027</dd></div>
+            <div><dt>Lots</dt><dd>62</dd></div>
+            <div><dt>Estimate</dt><dd>$18M to $24M</dd></div>
+          </dl>
+          <span class="event-cta">Register to bid</span>
+        </a>
+      </li>
+      <li>
+        <a class="event" href="event.html?e=villa-deste">
+          <div class="event-photo"><img src="assets/events/villa-deste.jpg" alt="Black 1930s Alfa Romeo 8C 2900B coupe on the lawn at Villa d'Este" loading="lazy"></div>
+          <div class="event-main">
+            <h3>Concorso d’Eleganza Villa d’Este</h3>
+            <p class="event-where">Lake Como, Italy</p>
+            <p class="event-blurb">Concours-grade classics sold on the shore of the lake.</p>
+          </div>
+          <dl class="event-facts">
+            <div><dt>Date</dt><dd>Apr 23 to 25, 2027</dd></div>
+            <div><dt>Lots</dt><dd>38</dd></div>
+            <div><dt>Estimate</dt><dd>$22M to $30M</dd></div>
+          </dl>
+          <span class="event-cta">Register to bid</span>
+        </a>
+      </li>
+      <li>
+        <a class="event" href="event.html?e=monterey">
+          <div class="event-photo"><img src="assets/events/pebble-beach.jpg" alt="Crowds walking the lawn at the Pebble Beach Concours d'Elegance beside the Pacific" loading="lazy"></div>
+          <div class="event-main">
+            <h3>Monterey Car Week</h3>
+            <p class="event-where">Pebble Beach, California</p>
+            <p class="event-blurb">The year’s biggest sale, timed to the concours on the 18th fairway.</p>
+          </div>
+          <dl class="event-facts">
+            <div><dt>Date</dt><dd>Aug 12 to 15, 2027</dd></div>
+            <div><dt>Lots</dt><dd>96</dd></div>
+            <div><dt>Estimate</dt><dd>$60M to $85M</dd></div>
+          </dl>
+          <span class="event-cta">Register to bid</span>
+        </a>
+      </li>
+      <li>
+        <a class="event" href="event.html?e=goodwood">
+          <div class="event-photo"><img src="assets/events/goodwood-revival.jpg" alt="Red 1950s Ferrari sports racers and spectators in period dress at the Goodwood Revival" loading="lazy"></div>
+          <div class="event-main">
+            <h3>Goodwood Revival</h3>
+            <p class="event-where">West Sussex, England</p>
+            <p class="event-blurb">Race and road cars from the golden era, sold the weekend they take to the circuit.</p>
+          </div>
+          <dl class="event-facts">
+            <div><dt>Date</dt><dd>Sep 10 to 12, 2027</dd></div>
+            <div><dt>Lots</dt><dd>48</dd></div>
+            <div><dt>Estimate</dt><dd>$16M to $22M</dd></div>
+          </dl>
+          <span class="event-cta">Register to bid</span>
+        </a>
+      </li>
+    </ul>
+  </section>
+
+  <!-- SELL -->
+  <section class="sell" id="sell">
+    <img src="assets/theodor.jpg" alt="Red 1965 Ford Mustang parked before ornate black and gold gates" loading="lazy">
+    <div class="sell-copy">
+      <h2>Sell a Car</h2>
+      <p class="sell-lead">Reach collectors in 40 countries. We handle photography, paperwork and payment.</p>
+      <ul class="perks">
+        <li><b>Worldwide exposure</b><span>Your listing reaches 50K+ verified bidders.</span></li>
+        <li><b>Secure settlement</b><span>Funds are held in escrow until the car changes hands.</span></li>
+        <li><b>Expert valuation</b><span>A specialist sets the estimate and reserve with you.</span></li>
+      </ul>
+      <a class="btn" href="#join">Get a free valuation</a>
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <h2>Three steps to the keys</h2>
+    <ol class="steps">
+      <li><span class="num">01</span><h3>Register and verify</h3><p>Create an account and confirm your identity once. Bidding unlocks within minutes.</p></li>
+      <li><span class="num">02</span><h3>Bid in real time</h3><p>Every bid lands instantly for everyone watching. Late bids extend the clock so nobody gets sniped.</p></li>
+      <li><span class="num">03</span><h3>Win and settle</h3><p>Funds are held in escrow and released only when the car changes hands.</p></li>
+    </ol>
+  </section>
+</main>
+
+<footer class="footer" id="join">
+  <div class="footer-top">
+    <h2 class="wordmark small">MARQUE</h2>
+    <div class="footer-cols">
+      <nav aria-label="Auctions"><h3 class="mono">Auctions</h3><ul><li><a href="#classic">Classic legends</a></li><li><a href="#muscle">Midnight muscle</a></li><li><a href="#events">Upcoming events</a></li></ul></nav>
+      <nav aria-label="Company"><h3 class="mono">Marque</h3><ul><li><a href="#sell">Sell a car</a></li><li><a href="#how">How it works</a></li><li><a href="#join">Contact</a></li></ul></nav>
+      <form class="join-form" onsubmit="return false"><label class="mono" for="email">Auction alerts</label><div><input id="email" type="email" placeholder="you@email.com" autocomplete="email"><button class="btn" type="submit">Join now</button></div></form>
+    </div>
+  </div>
+  <div class="footer-bottom"><p class="mono">© 2026 Marque Auctions. Bid responsibly.</p><p class="mono"><a href="#join">Terms</a> &nbsp; <a href="#join">Privacy</a> &nbsp; <a href="#join">Buyer’s guide</a></p></div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="script.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="motion.js"></script>
+</body>
+</html>
