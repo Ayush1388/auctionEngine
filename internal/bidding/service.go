@@ -302,10 +302,16 @@ func apply(
 	if in.IdempotencyKey != "" {
 		key = &in.IdempotencyKey
 	}
+	// created_at is clock_timestamp(), not the column default now(): now() is the
+	// time the TRANSACTION started, so a bid that queued behind others for the
+	// auction row would keep a timestamp from before it won the lock, and the
+	// history (ordered by created_at) could list a lower bid after a higher one.
+	// By the time this runs the row lock is held, so these timestamps follow the
+	// order bids were accepted.
 	var createdAt time.Time
 	err = tx.QueryRow(ctx, `
-		INSERT INTO bids (id, auction_id, user_id, amount, idempotency_key)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO bids (id, auction_id, user_id, amount, idempotency_key, created_at)
+		VALUES ($1, $2, $3, $4, $5, clock_timestamp())
 		RETURNING created_at
 	`, bidID, a.ID, in.UserID, in.Amount, key).Scan(&createdAt)
 	if err != nil {
