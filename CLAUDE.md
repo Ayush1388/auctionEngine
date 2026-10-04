@@ -23,4 +23,4 @@ The pages talk to a backend through `app/backend.js`: the real API when it answe
 - Test both engines: `?engine=sim` and `?engine=live`. Live needs Postgres and Redis, `make migrate`, the API with `RATE_LIMITS=off` and `CORS_ALLOWED_ORIGINS=http://localhost:5173`, `go run ./cmd/demobots seed`, and `go run ./cmd/demobots serve` for Stress it. Demo accounts: `demo@marque.test`, `collector@marque.test`, `admin@marque.test`, password `marque-demo-password`.
 - The demo engine's rules have tests: `node --test frontend/tests/sim-engine.test.mjs`. Keep them green when changing `sim-engine.js`.
 - No em dashes in visible copy (use a hyphen or restructure the sentence).
-- Go files in this repo are committed with CRLF line endings, the frontend with LF. Keep each file's existing endings (check with `git ls-files --eol`).
+- Every text file is LF (enforced by `.gitattributes`). CRLF breaks `gofmt` and the `deploy/*.sh` scripts in CI.
