@@ -1,4 +1,4 @@
-// Demo-only: one template, four events. Data is made up for the demo; no backend calls yet.
+// One template, four events. The editorial content lives here; the lot cards are brought to life by app/cards.js.
 const money = n => "$" + n.toLocaleString("en-US");
 const pad = n => String(n).padStart(2, "0");
 const clock = s => { s = Math.max(0, s); return [Math.floor(s / 3600), Math.floor(s % 3600 / 60), s % 60].map(pad).join(":"); };
@@ -74,7 +74,7 @@ $("evFacts").innerHTML = ev.facts.map(f => `<div><dt>${f[0]}</dt><dd>${f[1]}</dd
 /* experience: ball and road, animated with GSAP ScrollTrigger */
 $("expTitle").textContent = ev.expTitle; $("expLead").textContent = ev.expLead;
 const X = $("x"); X.className = "x x-" + ev.layout;
-X.innerHTML = (ev.layout === "wave" ? `<div class="x-pano" aria-hidden="true">${ev.exp.map(x => `<img src="${x[4]}" alt="">`).join("")}</div>` : "") + `<svg class="x-road" aria-hidden="true"><path class="x-road-bg"/><path class="x-road-fg"/></svg><div class="x-ball" aria-hidden="true"></div>` +
+X.innerHTML = `<svg class="x-road" aria-hidden="true"><path class="x-road-bg"/><path class="x-road-fg"/></svg><div class="x-ball" aria-hidden="true"></div>` +
   `<ol class="x-items">` + ev.exp.map((x, i) => `<li class="x-item" data-i="${i}"><div class="x-photo"><img src="${x[4]}" alt="" loading="lazy"></div><div class="x-body"><span class="x-dot"></span><h3>${x[0]}</h3><p>${x[1]}</p><span class="mono x-meta">${x[2]}</span><span class="mono x-meta">${x[3]}</span></div></li>`).join("") + `</ol>` +
   (ev.layout === "snake" ? `<span class="x-amp" data-a="0">&amp;</span><span class="x-amp" data-a="1">&amp;</span>` : "");
 
@@ -97,13 +97,6 @@ function buildRoad() {
     X.querySelectorAll(".x-amp").forEach((a, n) => { const y = n ? y2 : y1, x = n ? (P[2][0] + P[3][0]) / 2 : (P[0][0] + P[1][0]) / 2; a.style.transform = `translate(${x - 20}px, ${y - 20}px)`; });
   }
   svg.querySelectorAll("path").forEach(p => p.setAttribute("d", d));
-  const pano = X.querySelector(".x-pano");
-  if (pano && ev.layout === "wave") {          // clip the photo band along the road so its lower edge is the wave
-    const fg = svg.querySelector(".x-road-fg"), L = fg.getTotalLength(), pad = parseFloat(getComputedStyle(X.parentElement).paddingLeft) || 0, up = 8, pts = [];
-    for (let i = 0; i <= 90; i++) { const q = fg.getPointAtLength(L * i / 90); pts.push(`${(q.x + pad).toFixed(1)}px ${(q.y - up).toFixed(1)}px`); }
-    const Wp = W + 2 * pad, yS = P[0][1] - up, yE = P[3][1] - up;
-    pano.style.clipPath = `polygon(0px 0px, ${Wp}px 0px, ${Wp}px ${yE}px, ${pts.reverse().join(", ")}, 0px ${yS}px)`;
-  }
   return { path: svg.querySelector(".x-road-fg"), P };
 }
 
@@ -153,11 +146,12 @@ const say = m => { toast.textContent = m; toast.classList.add("show"); clearTime
 const draw = (c, flash) => { window.tickBid ? window.tickBid(c.bidEl, c.bid, money) : (c.bidEl.textContent = money(c.bid)); c.nextEl.textContent = money(c.bid + c.step); c.bidsEl.textContent = c.count + " bids"; if (flash) { c.el.classList.remove("flash"); void c.el.offsetWidth; c.el.classList.add("flash"); } };
 cards.forEach(c => {
   draw(c); c.timeEl.textContent = clock(c.left); c.el.classList.toggle("urgent", c.left < 1800);
-  c.btn.addEventListener("click", () => { if (c.left <= 0) return; c.bid += c.step; c.count++; draw(c, true); say("Bid placed: " + money(c.bid)); });
+  c.btn.addEventListener("click", () => { if (window.marqueLive || c.left <= 0) return; c.bid += c.step; c.count++; draw(c, true); say("Bid placed: " + money(c.bid)); });
   c.heart.addEventListener("click", () => { const on = c.heart.classList.toggle("on"); c.heart.textContent = on ? "♥" : "♡"; c.heart.setAttribute("aria-pressed", on); });
 });
 setInterval(() => {
   ftLeft = Math.max(0, ftLeft - 1); $("ftTime").textContent = clock(ftLeft);
+  if (window.marqueLive) return;
   cards.forEach(c => {
     if (c.left <= 0) return; c.left--; c.el.classList.toggle("urgent", c.left < 1800);
     if (c.left === 0) { c.timeEl.textContent = "Closed"; c.btn.disabled = true; c.btn.textContent = "Auction closed"; return; }
