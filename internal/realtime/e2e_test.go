@@ -76,4 +76,18 @@ func TestBidReachesWatcherEndToEnd(t *testing.T) {
 	if m["cause"] != "bid.placed" || snap["current_bid"] != 1500.0 || snap["bid_count"] != 1.0 {
 		t.Fatalf("watcher got %v", m)
 	}
+
+	// The update also names the bid (so a client can match its own request or
+	// learn it was outbid) and carries the API's own timestamps, so the time the
+	// event spent between commit and push needs no clock sync with the browser.
+	b, _ := m["bid"].(map[string]any)
+	if b == nil || b["bidder_id"] != bidder.String() || b["amount"] != 1500.0 || b["id"] == "" {
+		t.Fatalf("update does not describe the bid: %v", m["bid"])
+	}
+	tm, _ := m["timing"].(map[string]any)
+	placed, err1 := time.Parse(time.RFC3339Nano, tm["placed_at"].(string))
+	sent, err2 := time.Parse(time.RFC3339Nano, tm["sent_at"].(string))
+	if err1 != nil || err2 != nil || sent.Before(placed) {
+		t.Fatalf("timing is wrong: %v", tm)
+	}
 }

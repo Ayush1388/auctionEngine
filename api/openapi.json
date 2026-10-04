@@ -1257,7 +1257,8 @@
               }
             }
           }
-        }
+        },
+        "description": "The response carries a Server-Timing header with the phases of the bidding transaction (lock, decide, write, commit) and the whole call (bidding), also on refused bids, and X-Trace-ID when tracing is on. A refused bid's lock time is how long it waited behind the winner."
       },
       "get": {
         "tags": [
@@ -1576,6 +1577,86 @@
         }
       }
     },
+    "/v1/admin/metrics": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "This instance's application metrics as JSON",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metric families",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "time": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "families": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "counter",
+                              "gauge",
+                              "histogram"
+                            ]
+                          },
+                          "help": {
+                            "type": "string"
+                          },
+                          "samples": {
+                            "type": "array",
+                            "items": {
+                              "type": "object"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not logged in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "The same series Prometheus scrapes from the internal admin port, as JSON for the operator dashboard. Counters and gauges carry value; histograms carry count, sum and cumulative buckets."
+      }
+    },
     "/v1/admin/outbox/failed": {
       "get": {
         "tags": [
@@ -1789,7 +1870,7 @@
                             "properties": {
                               "highlight": {
                                 "type": "string",
-                                "description": "Snippet with matches in <em>\u2026</em>"
+                                "description": "Snippet with matches in <em>…</em>"
                               }
                             }
                           }
@@ -1902,7 +1983,7 @@
           "realtime"
         ],
         "summary": "Live auction updates (WebSocket)",
-        "description": "Upgrade to a WebSocket. Send {\"action\":\"subscribe\",\"auction_id\":\"\u2026\"} to watch an auction; you receive {\"type\":\"auction.updated\",\"cause\":\"bid.placed\",\"auction\":{\u2026,\"version\":N}} on every change. Apply a snapshot only if its version is higher than the one you have. Read-only and public; bids are placed over REST. Close codes: 1001 server restarting (reconnect), 1008 too slow to keep up, 1009 message too big, 1013 at capacity (retry later).",
+        "description": "Upgrade to a WebSocket. Send {\"action\":\"subscribe\",\"auction_id\":\"…\"} to watch an auction; you receive {\"type\":\"auction.updated\",\"cause\":\"bid.placed\",\"auction\":{…,\"version\":N}} on every change. For bid.placed the message also carries \"bid\" (id, bidder_id, previous_bidder_id, amount, extended) and \"timing\" (placed_at and sent_at, both from the API clock), so a client can match its own bid, know it was outbid, and see the outbox delay without clock sync. Apply a snapshot only if its version is higher than the one you have. Read-only and public; bids are placed over REST. Close codes: 1001 server restarting (reconnect), 1008 too slow to keep up, 1009 message too big, 1013 at capacity (retry later).",
         "responses": {
           "101": {
             "description": "Switching protocols"
