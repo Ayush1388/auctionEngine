@@ -151,6 +151,17 @@ jobs:
         if: always()
         run: docker compose -f deploy/compose.yml down -v
 
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The demo engine has to follow the backend's rules, so it has its own tests.
+      - run: node --test frontend/tests/sim-engine.test.mjs
+
   # -------------------------------------------------------------------------
   # Container image: built for amd64 and arm64 on every pull request, and
   # published to GitHub Container Registry from main. Deploy by commit SHA

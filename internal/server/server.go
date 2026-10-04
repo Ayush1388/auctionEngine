@@ -142,6 +142,7 @@ func routes(d Deps) []Route {
 
 		// Admin (role "admin" only)
 		{"GET", "/v1/admin/reconcile", admin(d.Admin.Reconcile)},
+		{"GET", "/v1/admin/metrics", admin(d.Admin.Metrics)},
 		{"GET", "/v1/admin/outbox/failed", admin(d.Admin.FailedEvents)},
 		{"POST", "/v1/admin/outbox/{id}/retry", admin(d.Admin.RetryEvent)},
 	}

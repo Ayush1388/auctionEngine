@@ -132,14 +132,9 @@
 }
 @media (max-width: 520px) { .x-wave .x-items { grid-template-columns: 1fr; } }
 
-/* Wave layout (wide screens): one full-bleed photo band whose bottom edge follows the road */
-.x-pano { display: none; }
-@media (min-width: 901px) {
-  .x-wave .x-photo { display: none; }
-  .x-wave .x-items { padding-top: 400px; }
-  .x-wave .x-pano { display: flex; position: absolute; top: 0; height: 560px; left: calc(-1 * var(--pad)); width: calc(100% + 2 * var(--pad)); z-index: 0; pointer-events: none; }
-  .x-pano img { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; margin: 0 -1.5%; position: relative;
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 9%, #000 91%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 9%, #000 91%, transparent 100%); }
-  .x-pano img:first-child { margin-left: 0; -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 90%, transparent 100%); mask-image: linear-gradient(90deg, #000 0%, #000 90%, transparent 100%); }
-  .x-pano img:last-child { margin-right: 0; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 100%); }
-}
+/* the event header sits on a photo: the shell controls need light text there */
+.ev-bar .chip { color: #f8faed; border-color: rgba(248, 250, 237, .45); }
+.ev-bar .chip .mono, .ev-bar .acct-n { color: rgba(248, 250, 237, .8); }
+.ev-bar .bell, .ev-bar .linkish { color: #f8faed; }
+.ev-bar .shell-actions { gap: 14px; }
+.ev-bar .btn { background: var(--red); color: var(--cream); }

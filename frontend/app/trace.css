@@ -1,0 +1,85 @@
+/* Behind the bid: a drawer that explains one bid. Same surfaces and type as the rest of the site. */
+.trace {
+  position: fixed; z-index: 55; top: 0; right: 0; height: 100%; width: min(560px, 100%);
+  display: flex; flex-direction: column; background: var(--bg); color: var(--fg); border-left: 1px solid var(--line);
+  box-shadow: -30px 0 60px -40px var(--shadow);
+  transform: translateX(100%); visibility: hidden; transition: transform .4s cubic-bezier(.7, 0, .2, 1), visibility 0s .4s;
+}
+.trace.open { transform: none; visibility: visible; transition-delay: 0s; }
+.trace-head { display: flex; align-items: start; justify-content: space-between; gap: 16px; padding: 22px 24px 16px; border-bottom: 1px solid var(--line); }
+.trace-head h2 { font: 400 clamp(36px, 4vw, 52px)/.95 var(--display); letter-spacing: .01em; color: var(--accent); }
+.trace-head .mono { margin-top: 6px; color: var(--fg-soft); }
+.trace-x { width: 44px; height: 44px; font-size: 34px; line-height: 1; color: var(--accent); }
+.trace-body { flex: 1; overflow: auto; padding: 0 24px 40px; overscroll-behavior: contain; }
+.trace-intro { margin: 18px 0 4px; font-size: 14px; color: var(--fg-soft); max-width: 58ch; }
+.trace-empty { padding: 28px 0; }
+.trace-empty h3, .tr-sec h3 { font: 400 28px/1 var(--display); letter-spacing: .01em; }
+.trace-empty p { margin-top: 8px; color: var(--fg-soft); }
+
+.tr-sec { padding: 22px 0; border-top: 1px solid var(--line); }
+.tr-sec:first-of-type { border-top: 0; }
+.tr-sechead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tr-big { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 14px 0 6px; }
+.tr-big b { font: 500 clamp(30px, 4vw, 40px)/1 var(--mono); color: var(--accent); }
+.tr-big span { font-size: 14px; color: var(--fg-soft); }
+
+/* the timeline: one row per hop, bar length is the time it took, each group on its own scale */
+.tr-sub { margin: 18px 0 2px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-soft); }
+.hops { display: grid; }
+.hop { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: start; padding: 11px 0 12px; border-top: 1px solid var(--line); }
+.hop:first-child { border-top: 0; }
+.hop-name { display: grid; gap: 2px; min-width: 0; }
+.hop-name b { font-weight: 600; font-size: 14px; }
+.hop-name span { font-size: 12px; color: var(--fg-soft); line-height: 1.4; max-width: 46ch; }
+.hop-bar { grid-column: 1 / -1; height: 6px; }
+.hop-bar i { display: block; height: 100%; border-radius: 2px; background: var(--fg); transform-origin: left; animation: grow .5s cubic-bezier(.2, .7, .2, 1) both; }
+.hop-net .hop-bar i { background: var(--fg-soft); }
+.hop-ev .hop-bar i, .hop-total .hop-bar i { background: var(--red); }
+.hop-total { border-top: 1.5px solid var(--accent); }
+.hop-total .hop-name b { color: var(--accent); }
+.hop-off .hop-name b, .hop-off .hop-val b, .hop-wait .hop-val b { color: var(--fg-soft); font-weight: 500; }
+.hop-val { display: grid; justify-items: end; text-align: right; }
+.hop-val b { font: 500 15px var(--mono); }
+.hop-val .mono { font-size: 10px; letter-spacing: .04em; text-transform: none; color: var(--fg-soft); }
+@keyframes grow { from { transform: scaleX(0); } }
+
+.ids { display: grid; gap: 0; margin-top: 12px; border-top: 1px solid var(--line); }
+.ids > div { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ids dt { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-soft); }
+.ids dd { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.ids code, .tr-list code, .evlog code { font: 500 12px var(--mono); }
+.tr-outcome { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--bg-2); font-size: 14px; }
+.tr-leading, .tr-duplicate { background: var(--ok-bg); color: var(--ok); }
+.tr-collision, .tr-toolow, .tr-funds, .tr-ended, .tr-error { background: var(--bad-bg); color: var(--accent); }
+
+.tr-list { display: grid; margin-top: 8px; }
+.tr-list button { width: 100%; display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center; min-height: 44px; padding: 0 8px; border-top: 1px solid var(--line); text-align: left; }
+.tr-list button:hover, .tr-list button[aria-pressed="true"] { background: var(--bg-2); }
+.tr-list li:first-child button { border-top: 0; }
+
+.evlog { display: grid; margin: 8px 0 10px; font-size: 13px; }
+.evlog li { display: grid; grid-template-columns: 70px 38px 1fr auto auto auto; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); }
+.evlog li:first-child { border-top: 0; }
+.evlog time { color: var(--fg-soft); font-size: 11px; }
+
+.tr-controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; margin: 14px 0; }
+.tr-controls .field select { min-height: 44px; }
+.tr-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin: 14px 0; border-top: 1px solid var(--line); }
+.tr-stats > div { padding: 12px 0 10px; border-bottom: 1px solid var(--line); }
+.tr-stats dt { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-soft); }
+.tr-stats dd { font: 500 20px/1.3 var(--mono); }
+.checks { display: grid; margin-top: 8px; border-top: 1px solid var(--line); }
+.checks li { display: grid; grid-template-columns: 44px 1fr; gap: 2px 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.checks b { grid-row: 1 / 3; align-self: start; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding-top: 2px; }
+.checks .ok b { color: var(--ok); } .checks .bad b { color: var(--accent); }
+.checks em { font-style: normal; font-size: 12px; }
+
+@media (max-width: 640px) {
+  .trace { width: 100%; }
+  .tr-controls { grid-template-columns: 1fr 1fr; }
+  .tr-controls .btn { grid-column: 1 / -1; }
+  .tr-stats { grid-template-columns: repeat(2, 1fr); }
+  .evlog li { grid-template-columns: 62px 1fr auto; }
+  .evlog li code, .evlog li span:nth-of-type(3) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .hop-bar i { animation: none; } .trace { transition: none; } }

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | Search</title>
+  <meta name="description" content="Search every lot on Marque and see what is trending.">
+  <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="app/pages.css">
+</head>
+<body>
+<header id="appbar"></header>
+
+<main class="page">
+  <div class="page-head"><div><h1>Search</h1><p>Find a car by make, model or a word from its story. A typo still finds it.</p></div></div>
+
+  <form class="searchbar" id="searchForm" role="search">
+    <div class="combo">
+      <label class="visually" for="q">Search lots</label>
+      <input id="q" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugg" autocomplete="off" spellcheck="false" placeholder="Try Jaguar, Hemi or Targa">
+      <ul class="sugg" id="sugg" role="listbox" aria-label="Suggestions" hidden></ul>
+    </div>
+    <button class="btn" type="submit">Search</button>
+  </form>
+  <div class="chips" role="group" aria-label="Show" id="status"></div>
+
+  <section id="trendingSec" aria-labelledby="trH" hidden>
+    <h2 class="h2" id="trH">Hot right now</h2>
+    <p class="small muted">The lots with the most bids in the last hour.</p>
+    <ul class="trend" id="trending"></ul>
+  </section>
+
+  <section aria-labelledby="resH">
+    <div class="res-head"><h2 class="h2" id="resH">Open now</h2><p class="small muted mono" id="resMeta" role="status" aria-live="polite"></p></div>
+    <div class="grid" id="results" aria-busy="true"></div>
+    <div class="more"><button class="btn btn-line" id="more" hidden>Show more</button></div>
+  </section>
+</main>
+
+<footer id="appfooter"></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app/pages/search.js"></script>
+</body>
+</html>

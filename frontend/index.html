@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="app/pages.css">
 </head>
 <body>
 
@@ -30,12 +30,14 @@
             <li><a href="#classic">Classics</a></li>
             <li><a href="#muscle">Muscle</a></li>
             <li><a href="#events">Events</a></li>
-            <li><a href="#sell">Sell a car</a></li>
+            <li><a href="search.html">Search</a></li>
+            <li><a href="sell.html">Sell a car</a></li>
             <li><a href="#how">How it works</a></li>
           </ul>
         </nav>
 
         <div class="actions">
+          <span data-shell-actions></span>
           <button class="mode" id="modeToggle" role="switch" aria-checked="false" aria-label="Noir mode">
             <span class="mono mode-label">Noir</span>
             <span class="mode-track"><span class="mode-knob"></span></span>
@@ -60,7 +62,7 @@
         <span class="mono">2026 Season</span>
         <span class="mono" id="slideName">A noir icon</span>
         <span class="mono timer" id="heroClock" aria-label="Time until next gavel">00 : 00 : 00 : 00</span>
-        <a class="pill" href="#join">Join now</a>
+        <a class="pill" href="account.html?tab=create" data-join>Join now</a>
       </div>
     </div>
 
@@ -83,17 +85,17 @@
   <!-- Drawer opened by the hamburger -->
   <aside class="drawer" id="drawer" aria-hidden="true">
     <button class="drawer-close" id="drawerClose" aria-label="Close menu">×</button>
-    <form class="search" role="search" onsubmit="return false">
-      <input type="search" placeholder="Search makes, models, lots" aria-label="Search lots">
+    <form class="search" role="search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Search makes, models, lots" aria-label="Search lots">
     </form>
     <ul>
       <li><a href="#classic">Classic legends</a></li>
       <li><a href="#muscle">Midnight muscle</a></li>
       <li><a href="#events">Upcoming events</a></li>
       <li><a href="#sell">Sell a car</a></li>
-      <li><a href="#join">Sign in</a></li>
+      <li><a href="account.html">Sign in</a></li>
     </ul>
-    <a class="pill pill-solid" href="#join">Join now</a>
+    <a class="pill pill-solid" href="account.html?tab=create" data-join>Join now</a>
   </aside>
 
   <section class="stats" aria-label="Marketplace figures">
@@ -101,6 +103,11 @@
     <div><b data-count="50" data-suffix="K+">0</b><span class="mono">Registered bidders</span></div>
     <div><b data-count="40" data-suffix="+">0</b><span class="mono">Countries</span></div>
     <div><b data-count="120" data-prefix="$" data-suffix="M+">0</b><span class="mono">Cars sold</span></div>
+  </section>
+
+  <section class="trend-sec" id="trendSec" aria-labelledby="trH" hidden>
+    <h2 class="h2" id="trH">Hot right now</h2>
+    <ul class="trend" id="homeTrending"></ul>
   </section>
 
   <!-- CLASSICS: photo fades into the page on its right edge -->
@@ -211,7 +218,7 @@
         <li><b>Secure settlement</b><span>Funds are held in escrow until the car changes hands.</span></li>
         <li><b>Expert valuation</b><span>A specialist sets the estimate and reserve with you.</span></li>
       </ul>
-      <a class="btn" href="#join">Get a free valuation</a>
+      <a class="btn" href="sell.html">List your car</a>
     </div>
   </section>
 
@@ -242,5 +249,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 <script src="motion.js"></script>
+<script type="module" src="app/pages/home.js"></script>
 </body>
 </html>

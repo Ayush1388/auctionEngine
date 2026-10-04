@@ -1,9 +1,3 @@
-.visually { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.lt-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 64px; padding: 0 var(--pad); background: var(--bg); color: var(--accent); border-bottom: 1px solid var(--line); }
-.lt-nav { display: flex; gap: clamp(14px, 2vw, 32px); }
-.lt-nav a { display: inline-flex; align-items: center; min-height: 44px; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; transition: opacity .2s; }
-.lt-nav a:hover { opacity: .55; }
-.lt-actions { display: flex; align-items: center; gap: 16px; }
 
 .lt-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr); gap: clamp(20px, 3vw, 48px); padding: 0 var(--pad) clamp(40px, 5vw, 72px) 0; align-items: start; }
 .lt-left { min-width: 0; }
@@ -110,4 +104,63 @@
   .lt-cell:nth-child(2) { padding-left: 0; border: 0; }
   .lt-form { grid-template-columns: 1fr; }
   .lt-quote { flex-direction: column; align-items: flex-start; }
+}
+
+/* ---------- live bidding states (the bid box is always dark, so these colours do not follow the theme) ---------- */
+.lt-live.on { color: var(--accent); }
+.lt-sub:empty { display: none; }
+.lt-p { margin-top: 14px; max-width: 62ch; color: var(--fg-soft); }
+.lt-clock { transition: color .3s; }
+.lt-clock.urgent { color: #ff8f86; }
+.lt-clock.bump { animation: bump .9s cubic-bezier(.2, .7, .2, 1); }
+@keyframes bump { 0% { transform: scale(1); } 30% { transform: scale(1.12); color: #ffb36b; } 100% { transform: scale(1); } }
+
+.lt-snipe { padding: 10px 14px; border-radius: 10px; background: rgba(255, 179, 107, .12); border: 1px solid rgba(255, 179, 107, .38); color: #ffb36b; font-size: 13px; line-height: 1.45; }
+.lt-snipe b { font-weight: 600; }
+
+.lt-wallet { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 26px; padding: 14px 0 2px; border-top: 1px solid rgba(248, 250, 237, .18); font-size: 13px; color: rgba(248, 250, 237, .75); }
+.lt-wallet p { color: rgba(248, 250, 237, .8); }
+.lt-wallet a { color: #ff8f86; text-decoration: underline; text-underline-offset: 3px; }
+.lt-wallet b { display: block; margin-top: 2px; font: 500 16px var(--mono); color: #f8faed; font-variant-numeric: tabular-nums; }
+.lt-wallet .linkish { margin-left: auto; color: #ff8f86; }
+.lt-wallet.is-leading .lt-held b { color: #6fd39b; }
+
+.lt-result { display: none; gap: 10px; align-items: start; padding: 12px 14px; border-radius: 10px; font-size: 14px; line-height: 1.45; background: rgba(248, 250, 237, .08); color: #f8faed; }
+.lt-result p { max-width: 52ch; }
+.lt-result .btn { justify-self: start; }
+.lt-result[class*="r-"] { display: grid; }
+.r-leading { background: rgba(111, 211, 155, .13); color: #6fd39b; }
+.r-duplicate, .r-queued { background: rgba(255, 179, 107, .12); color: #ffb36b; }
+.r-collision, .r-outbid, .r-toolow, .r-funds, .r-ended, .r-error, .r-own, .r-ratelimit, .r-unavailable, .r-offline { background: rgba(229, 83, 75, .16); color: #ff9c94; }
+
+.lt-closed { padding: 14px 16px; border-radius: 10px; border: 1px solid rgba(248, 250, 237, .22); display: grid; gap: 8px; justify-items: start; }
+.lt-closed h3 { font: 400 30px/1 var(--display); letter-spacing: .01em; }
+.lt-closed p { font-size: 14px; color: rgba(248, 250, 237, .85); }
+.lt-closed.is-won { border-color: #6fd39b; }
+.lt-closed.is-won h3 { color: #6fd39b; }
+.lt-form[hidden] { display: none; }
+.lt-field input:disabled { opacity: .5; }
+.lt-go:disabled { opacity: .5; }
+
+.lt-demo { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 2px; }
+.lt-demo .btn-line { color: #f8faed; border-color: rgba(248, 250, 237, .55); }
+.lt-demo .btn-line:hover { background: #f8faed; border-color: #f8faed; color: #000101; }
+.lt-hist-empty { padding: 14px 0 4px; font-size: 14px; color: var(--fg-soft); }
+.lt-history td:nth-child(2) { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rc { display: grid; margin: 16px 0 12px; border-top: 1px solid var(--line); }
+.rc > div { display: grid; grid-template-columns: 9rem 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rc dt { font: 500 11px/1.6 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-soft); }
+.lt .page { padding-top: 56px; }
+@media (max-width: 640px) { .rc > div { grid-template-columns: 1fr; gap: 2px; } }
+@media (prefers-reduced-motion: reduce) { .lt-clock.bump { animation: none; } }
+
+/* On a phone the bid box comes straight after the photo: bidding is the point of the page, the story can wait. */
+@media (max-width: 1100px) {
+  .lt-grid { display: flex; flex-direction: column; padding-right: 0; }
+  .lt-left { display: contents; }
+  .lt-stage { order: 1; } .lt-thumbs { order: 2; }
+  .lt-right { order: 3; margin-top: 16px; }
+  .lt-tabs { order: 4; } .lt-panel { order: 5; }
+  .lt-stage, .lt-thumbs { width: 100%; }
 }

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | Sell a car</title>
+  <meta name="description" content="List a car for auction on Marque.">
+  <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="app/pages.css">
+</head>
+<body>
+<header id="appbar"></header>
+
+<main class="page">
+  <div class="page-head">
+    <div><h1>Sell a car</h1><p>List it, set the price and the clock, and bidders see it live. The auction opens and closes on its own.</p></div>
+    <a class="btn btn-line" href="#listings">My listings</a>
+  </div>
+
+  <div class="split sell-split" id="sellBody" aria-busy="true">
+    <form class="sell-form" id="sellForm" novalidate>
+      <fieldset class="stack"><legend class="h2">The car</legend>
+        <div class="field" data-f="title"><label for="title">Title</label><input id="title" maxlength="200" placeholder="1967 Shelby GT500 KR" autocomplete="off"><span class="err"></span></div>
+        <div class="field-row three">
+          <div class="field" data-f="year"><label for="year">Year</label><input id="year" inputmode="numeric" maxlength="4" placeholder="1967"><span class="err"></span></div>
+          <div class="field" data-f="make"><label for="make">Make</label><input id="make" placeholder="Shelby"><span class="err"></span></div>
+          <div class="field" data-f="model"><label for="model">Model</label><input id="model" placeholder="GT500 KR"><span class="err"></span></div>
+        </div>
+        <div class="field-row">
+          <div class="field" data-f="where"><label for="where">Where the car is</label><input id="where" placeholder="Nuremberg, Germany"><span class="err"></span></div>
+          <div class="field" data-f="category"><label for="category">Section</label><select id="category"><option value="classic">Classic legends</option><option value="muscle">Midnight muscle</option></select><span class="err"></span></div>
+        </div>
+        <div class="field" data-f="description"><label for="description">Description</label><textarea id="description" maxlength="4000" placeholder="History, condition, what is original."></textarea><span class="hint" id="descCount">0 / 4000</span><span class="err"></span></div>
+      </fieldset>
+
+      <fieldset class="stack"><legend class="h2">Photo</legend>
+        <div class="photos" id="photos" role="radiogroup" aria-label="Photo"></div>
+        <div class="field"><label for="upload">Or use your own</label><input id="upload" type="file" accept="image/*"><span class="hint">Your own photo is kept in this browser only, because the API stores listings, not files. Everyone else sees the house photo chosen above.</span><span class="err" id="upErr"></span></div>
+      </fieldset>
+
+      <fieldset class="stack"><legend class="h2">Price and clock</legend>
+        <div class="field-row">
+          <div class="field" data-f="startingPrice"><label for="startingPrice">Opening bid</label><div class="money"><input id="startingPrice" inputmode="numeric" placeholder="25,000"></div><span class="err"></span></div>
+          <div class="field" data-f="step"><label for="step">Each bid goes up by at least</label><div class="money"><input id="step" inputmode="numeric" placeholder="500" value="500"></div><span class="err"></span></div>
+        </div>
+        <div class="field-row">
+          <div class="field" data-f="startsAt"><label for="opens">Opens</label><select id="opens"><option value="1">In 1 minute</option><option value="60">In 1 hour</option><option value="1440">In 1 day</option><option value="custom">Pick a date and time</option></select><input id="opensAt" type="datetime-local" hidden aria-label="Opening date and time"><span class="err"></span></div>
+          <div class="field" data-f="duration"><label for="duration">Runs for</label><select id="duration"><option value="5">5 minutes (a quick demo)</option><option value="60">1 hour</option><option value="360">6 hours</option><option value="1440" selected>1 day</option><option value="4320">3 days</option><option value="10080">7 days</option><option value="20160">14 days</option></select><span class="err"></span></div>
+        </div>
+        <p class="small muted">Bids in the last two minutes move the close to two minutes after the bid, up to 10 times.</p>
+      </fieldset>
+
+      <p class="form-error" id="formErr" role="alert" hidden></p>
+      <button class="btn" id="submit">List this car</button>
+    </form>
+
+    <aside class="sell-side" aria-label="Preview">
+      <h2 class="h2">What bidders see</h2>
+      <div id="preview"></div>
+      <section id="listings" aria-labelledby="listH">
+        <h2 class="h2" id="listH">My listings</h2>
+        <div id="myListings"><div class="skel" style="height:90px"></div></div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<footer id="appfooter"></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app/pages/sell.js"></script>
+</body>
+</html>

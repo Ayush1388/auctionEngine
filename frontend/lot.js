@@ -1,112 +1,280 @@
-// Demo lot page. Bids here only change local state; the rival bidder is simulated.
-const $ = id => document.getElementById(id);
-const money = n => "$" + n.toLocaleString("en-US");
-const pad = n => String(n).padStart(2, "0");
-const id = new URLSearchParams(location.search).get("id");
-const lot = LOTS[id] || LOTS.gt500;
-const key = LOTS[id] ? id : "gt500";
-const order = ["corvette", "gullwing", "etype", "porsche", "camaro", "gt500", "challenger", "boss429", "pontiac", "excalibur", "mustang", "impala"];
-const ix = order.indexOf(key === "boss" ? "boss429" : key);
-document.title = "Marque | " + lot.title;
+// Lot page. The price, the bid history and the clock all come from the backend
+// (the real API or the demo engine) and update live; nothing here is invented.
+import { initShell, toast, follow } from "./app/shell.js";
+import { LotSession, bidderLabel } from "./app/bidding.js";
+import { TracePanel } from "./app/trace.js";
+import { resolveId, catalogOrder } from "./app/lots.js";
+import { SNIPE_WINDOW } from "./app/rules.js";
+import { html, raw, esc, $, usd, parseUsd, clock, ago, dateTime, local, reduceMotion } from "./app/util.js";
+import { secondsLeft } from "./app/model.js";
 
-/* header info */
-$("lotNo").textContent = "Lot " + lot.lot;
-$("lotTitle").textContent = lot.title;
-$("lotSub").textContent = `${lot.event[1]}  |  ${lot.where}`;
-$("chips").innerHTML = [lot.make, lot.model, lot.year, lot.type].map(c => `<li>${c}</li>`).join("");
-$("prevLot").href = "lot.html?id=" + order[(ix + order.length - 1) % order.length];
-$("nextLot").href = "lot.html?id=" + order[(ix + 1) % order.length];
-$("backLink").href = "index.html#" + (["camaro", "gt500", "challenger", "boss429", "boss"].includes(key) ? "muscle" : "classic");
-$("qImg").src = lot.img; $("qEvent").textContent = lot.event[1]; $("qText").textContent = "“" + lot.quote + "”";
-$("qLink").href = "event.html?e=" + lot.event[0];
+const be = await initShell({ bar: true, footer: true });
+const param = new URLSearchParams(location.search).get("id") || "gt500";
+const main = $("#lotMain");
+const pad = n => String(n).padStart(2, "0");
+
+/* ---------------------------------------------------------------- not found, not reachable */
+function stop(title, body, actions = "") {
+  main.setAttribute("aria-busy", "false");
+  main.innerHTML = String(html`<div class="page"><div class="empty"><h3>${title}</h3><p>${body}</p><div class="pop-actions">${raw(actions)}</div></div></div>`);
+}
+if (be.unreachable) {
+  stop("The API is not answering", `Nothing is listening at ${be.base}. Start it with make run, or use the demo engine, which needs no server.`, `<a class="btn" href="?engine=sim">Use the demo engine</a>`);
+  throw new Error("api unreachable");
+}
+const id = await resolveId(be, param).catch(() => null);
+if (!id) {
+  stop("This lot is not on the backend", be.kind === "live" ? "The real API has no lot with that name yet. Load the catalogue with: go run ./cmd/demobots seed" : "No lot matches that link.",
+    `<a class="btn" href="index.html">Back to the auction</a>${be.kind === "live" ? `<a class="btn btn-line" href="?engine=sim">Use the demo engine</a>` : ""}`);
+  throw new Error("lot not found");
+}
+
+const s = new LotSession(be, id);
+try { await s.load(); }
+catch (e) { stop(e.status === 404 ? "Lot not found" : "Could not load this lot", e.message, `<a class="btn" href="index.html">Back to the auction</a>`); throw e; }
+const lot0 = s.lot;
+main.setAttribute("aria-busy", "false");
+const trace = new TracePanel(s, be);
+
+/* ---------------------------------------------------------------- static parts, drawn once */
+document.title = "Marque | " + lot0.title;
+$("#lotNo").textContent = lot0.lotNo ? "Lot " + lot0.lotNo : "Lot";
+$("#lotTitle").textContent = lot0.title;
+$("#lotSub").textContent = [lot0.event?.name, lot0.where].filter(Boolean).join("  |  ");
+$("#chips").innerHTML = String(html`${[lot0.make, lot0.model, lot0.year, lot0.type].filter(Boolean).map(c => html`<li>${c}</li>`)}`);
+$("#backLink").href = "index.html#" + (lot0.category === "muscle" ? "muscle" : "classic");
+if (lot0.quote) {
+  $("#quoteBand").hidden = false; $("#qImg").src = lot0.img; $("#qEvent").textContent = lot0.event?.name || ""; $("#qText").textContent = "“" + lot0.quote + "”";
+  lot0.event ? ($("#qLink").href = "event.html?e=" + lot0.event.slug) : ($("#qLink").hidden = true);
+}
+catalogOrder().then(order => {
+  const i = order.indexOf(lot0.key);
+  if (i < 0) { $(".lt-nextprev").hidden = true; return; }
+  $("#prevLot").href = "lot.html?id=" + order[(i + order.length - 1) % order.length];
+  $("#nextLot").href = "lot.html?id=" + order[(i + 1) % order.length];
+});
 
 /* gallery: the catalogue has one photo per car, so the views are framings of it */
-const views = [["100% 100%", 1, "50% " + lot.pos.split(" ")[1]], ["20% 50%", 1.7, "20% 55%"], ["80% 50%", 1.7, "80% 55%"], ["50% 40%", 1.7, "50% 40%"]];
+const posY = lot0.pos.split(" ")[1];
+const views = [["100% 100%", 1, "50% " + posY], ["20% 50%", 1.7, "20% 55%"], ["80% 50%", 1.7, "80% 55%"], ["50% 40%", 1.7, "50% 40%"]];
 let gi = 0;
-$("gThumbs").innerHTML = views.map((v, i) => `<li><button aria-label="View ${i + 1}"><img src="${lot.img}" alt="" style="object-position:${v[2]};${i ? "transform:scale(1.7);transform-origin:" + v[0] : ""}"></button></li>`).join("");
-const thumbs = [...$("gThumbs").querySelectorAll("button")];
+$("#gThumbs").innerHTML = views.map((v, i) => `<li><button aria-label="View ${i + 1}"><img src="${esc(lot0.img)}" alt="" style="object-position:${v[2]};${i ? "transform:scale(1.7);transform-origin:" + v[0] : ""}"></button></li>`).join("");
+const thumbs = [...document.querySelectorAll("#gThumbs button")];
 function view(i) {
-  gi = (i + views.length) % views.length; const v = views[gi], m = $("gMain");
-  m.src = lot.img; m.alt = `${lot.title}, view ${gi + 1}`; m.style.objectPosition = gi ? v[2] : lot.pos; m.style.transformOrigin = v[0]; m.style.transform = `scale(${v[1]})`;
-  thumbs.forEach((b, k) => b.classList.toggle("on", k === gi)); $("gCount").textContent = `${pad(gi + 1)} / ${pad(views.length)}`;
+  gi = (i + views.length) % views.length; const v = views[gi], m = $("#gMain");
+  m.src = lot0.img; m.alt = `${lot0.alt}, view ${gi + 1}`; m.style.objectPosition = gi ? v[2] : lot0.pos; m.style.transformOrigin = v[0]; m.style.transform = `scale(${v[1]})`;
+  thumbs.forEach((b, k) => b.classList.toggle("on", k === gi)); $("#gCount").textContent = `${pad(gi + 1)} / ${pad(views.length)}`;
 }
 thumbs.forEach((b, i) => b.addEventListener("click", () => view(i)));
-$("gPrev").addEventListener("click", () => view(gi - 1)); $("gNext").addEventListener("click", () => view(gi + 1)); view(0);
+$("#gPrev").addEventListener("click", () => view(gi - 1)); $("#gNext").addEventListener("click", () => view(gi + 1)); view(0);
 
-/* tabs */
-const specRows = [["Engine", lot.engine], ["Transmission", lot.trans], ["Power", lot.power], ["Exterior", lot.colour], ["Interior", lot.interior], ["Mileage", lot.miles], ["Chassis no.", lot.chassis]];
-const specHTML = `<dl class="lt-specs">${specRows.map(r => `<div><dt>${r[0]}</dt><dd>${r[1]}</dd></div>`).join("")}</dl>`;
+/* tabs: only the ones that have something to say */
+const specHTML = lot0.specs.length ? html`<dl class="lt-specs">${lot0.specs.map(r => html`<div><dt>${r[0]}</dt><dd>${r[1]}</dd></div>`)}</dl>` : "";
 const TABS = {
-  Overview: `<div class="lt-ov"><div><h2>${lot.lead}</h2>${lot.text.map(t => `<p>${t}</p>`).join("")}</div>${specHTML}</div>`,
-  Specifications: `<h2>Specifications</h2>${specHTML}`,
-  History: `<h2>History</h2><p style="margin-top:14px;max-width:62ch;color:var(--fg-soft)">${lot.history}</p>`,
-  Condition: `<h2>Condition</h2><ul class="lt-list"><li>Paint and brightwork: presented in ${lot.colour.toLowerCase()} with a consistent finish.</li><li>Mechanical: engine and gearbox run and shift as expected for a ${lot.year} ${lot.make}.</li><li>Interior: ${lot.interior.toLowerCase()}, with wear in keeping with ${lot.miles}.</li></ul>`,
-  Documentation: `<h2>Documentation</h2><ul class="lt-list"><li>Ownership history and registration papers</li><li>Service and restoration invoices</li><li>Chassis and engine number verification</li></ul>`,
-  Shipping: `<h2>Shipping</h2><p style="margin-top:14px;max-width:62ch;color:var(--fg-soft)">The car is in ${lot.where}. We arrange enclosed worldwide transport and export paperwork after payment clears. A quote is shown at checkout.</p>`,
+  Overview: html`<div class="lt-ov"><div><h2>${lot0.lead || lot0.title}</h2>${lot0.text.map(t => html`<p>${t}</p>`)}</div>${specHTML}</div>`,
 };
-const tabsEl = $("tabs");
-tabsEl.innerHTML = Object.keys(TABS).map((t, i) => `<button role="tab" aria-selected="${i === 0}" data-t="${t}">${t}</button>`).join("");
-function tab(t) { tabsEl.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", b.dataset.t === t)); $("panel").innerHTML = TABS[t]; if (window.gsap) gsap.from("#panel > *", { autoAlpha: 0, y: 8, duration: .4, ease: "power2.out" }); }
-tabsEl.addEventListener("click", e => { if (e.target.dataset.t) tab(e.target.dataset.t); }); $("panel").innerHTML = TABS.Overview;
+if (lot0.specs.length) TABS.Specifications = html`<h2>Specifications</h2>${specHTML}`;
+if (lot0.history) TABS.History = html`<h2>History</h2><p class="lt-p">${lot0.history}</p>`;
+if (lot0.specs.length) {
+  const m = x => (x || "").toLowerCase();
+  TABS.Condition = html`<h2>Condition</h2><ul class="lt-list"><li>Paint and brightwork: presented in ${m(lot0.specs.find(r => r[0] === "Exterior")?.[1]) || "its original colour"} with a consistent finish.</li><li>Mechanical: engine and gearbox run and shift as expected${lot0.year ? ` for a ${lot0.year} ${lot0.make || "car"}` : ""}.</li><li>Interior: ${m(lot0.specs.find(r => r[0] === "Interior")?.[1]) || "as described"}, with wear in keeping with ${lot0.specs.find(r => r[0] === "Mileage")?.[1] || "its mileage"}.</li></ul>`;
+  TABS.Documentation = html`<h2>Documentation</h2><ul class="lt-list"><li>Ownership history and registration papers</li><li>Service and restoration invoices</li><li>Chassis and engine number verification</li></ul>`;
+}
+TABS.Shipping = html`<h2>Shipping</h2><p class="lt-p">The car is in ${lot0.where || "the seller's location"}. We arrange enclosed worldwide transport and export paperwork after payment clears. A quote is shown at checkout.</p>`;
+const tabsEl = $("#tabs");
+tabsEl.innerHTML = Object.keys(TABS).map((t, i) => `<button role="tab" aria-selected="${i === 0}" data-t="${esc(t)}">${esc(t)}</button>`).join("");
+function tabTo(t) {
+  tabsEl.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", b.dataset.t === t)); $("#panel").innerHTML = String(TABS[t]);
+  if (window.gsap && !reduceMotion()) gsap.from("#panel > *", { autoAlpha: 0, y: 8, duration: .4, ease: "power2.out" });
+}
+tabsEl.addEventListener("click", e => { if (e.target.dataset.t) tabTo(e.target.dataset.t); });
+$("#panel").innerHTML = String(TABS.Overview);
 
-/* bidding state */
-const toast = $("toast"); let tt;
-const say = m => { toast.textContent = m; toast.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => toast.classList.remove("show"), 2200); };
-let bid = lot.bid, count = lot.bids, left = lot.end, last = 0, proxy = 0, proxyMode = false;
-const names = ["Bidder #184", "Bidder #291", "Bidder #407", "Bidder #052"];
-const hist = [];
-for (let k = 0; k < 5; k++) hist.push({ n: count - k, who: names[k % 3], amt: bid - k * lot.step, t: Date.now() - [0, 2, 5, 8, 12][k] * 60000, you: false });
-const ago = t => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? "just now" : m + " min ago"; };
-function drawHist(newRow) {
-  $("hist").innerHTML = hist.slice(0, 6).map((h, i) => `<tr class="${h.you ? "you" : ""}${i === 0 && newRow ? " new" : ""}"><td>${h.n}</td><td>${h.you ? "You" : h.who}</td><td>${money(h.amt)}</td><td>${ago(h.t)}</td></tr>`).join("");
-  if (newRow && window.gsap) { const r = $("hist").firstElementChild; gsap.from(r, { autoAlpha: 0, y: -10, duration: .5, ease: "power2.out" }); setTimeout(() => r && r.classList.remove("new"), 1600); }
+/* save, share */
+const savedKey = "marque-saved:" + be.kind;
+const savedSet = () => new Set(local.json(savedKey, []));
+const paintSaved = on => { const b = $("#saveBtn"); b.setAttribute("aria-pressed", on); b.textContent = on ? "Saved" : "Save"; };
+paintSaved(savedSet().has(id));
+$("#saveBtn").onclick = () => { const set = savedSet(), on = !set.has(id); on ? set.add(id) : set.delete(id); local.setJson(savedKey, [...set]); paintSaved(on); toast(on ? "Saved to your list" : "Removed from your list"); };
+$("#shareBtn").onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(location.href) : Promise.reject()).then(() => toast("Link copied"), () => toast("Copy the address bar to share")); };
+
+/* ---------------------------------------------------------------- the bid box */
+const amt = $("#amt"), me = () => be.session.id;
+let dirty = false, holdInputUntil = 0, lastDelta = 0, ending = false;
+const money = c => usd(c);
+const amtCents = () => parseUsd(amt.value);
+
+const low = Math.round((lot0.current ?? lot0.startingPrice) * 0.8 / 100000) * 100000, high = Math.round((lot0.current ?? lot0.startingPrice) * 1.35 / 100000) * 100000;
+$("#estLow").textContent = money(low); $("#estHigh").textContent = money(high); $("#resv").textContent = lot0.reserve;
+
+function setAmount(c) { amt.value = money(c); }
+$("#plus").onclick = () => { dirty = true; setAmount((amtCents() || s.lot.minNext) + s.lot.step); };
+$("#minus").onclick = () => { dirty = true; setAmount(Math.max(s.lot.minNext, (amtCents() || s.lot.minNext) - s.lot.step)); };
+amt.addEventListener("input", () => { dirty = true; });
+amt.addEventListener("blur", () => { if (amtCents()) setAmount(amtCents()); });
+
+function paintLot() {
+  const l = s.lot, live = l.status === "ACTIVE", upcoming = l.status === "NOT_ACTIVE";
+  window.tickBid ? window.tickBid($("#curBid"), l.current ?? l.startingPrice, money) : ($("#curBid").textContent = money(l.current ?? l.startingPrice));
+  $("#clockLab").textContent = upcoming ? "Opens in" : "Time remaining";
+  $("#bidCount").textContent = l.bids;
+  const span = Math.max(1, high - low);
+  $("#mark").style.left = Math.max(0, Math.min(100, ((l.current ?? l.startingPrice) - low) / span * 100)) + "%";
+  $("#minLine").textContent = live ? `Minimum next bid ${money(l.minNext)}. Each bid goes up by at least ${money(l.step)}.` : "";
+  $("#delta").textContent = lastDelta > 0 ? `+${money(lastDelta)}  just now` : "";
+
+  // keep the field at the minimum unless the person is typing, or just placed a bid (see the double click guard)
+  const stillHolding = Date.now() < holdInputUntil;
+  if (live && !stillHolding && (!dirty || amtCents() < l.minNext)) { setAmount(l.minNext); dirty = false; }
+
+  const go = $("#goBtn");
+  if (!me()) { go.textContent = "Sign in to bid"; go.disabled = false; }
+  else if (live) { go.textContent = "Place bid"; go.disabled = false; }
+  else { go.textContent = upcoming ? "Not open yet" : l.status === "COMPLETED" ? "Auction closed" : "Not open for bids"; go.disabled = true; }
+  amt.disabled = !live; $("#plus").disabled = $("#minus").disabled = !live;
+  $("#liveTag").textContent = live ? (be.feed.state === "open" ? "Live" : "Reconnecting") : upcoming ? "Opens soon" : l.status === "COMPLETED" ? "Closed" : "Cancelled";
+  $("#liveTag").classList.toggle("on", live && be.feed.state === "open");
+  paintWallet(); paintClosed(); paintSnipe();
 }
-const low = Math.round(lot.bid * 0.8 / 1000) * 1000, high = Math.round(lot.bid * 1.35 / 1000) * 1000;
-$("estLow").textContent = money(low); $("estHigh").textContent = money(high); $("resv").textContent = lot.reserve;
-function paint(rowNew, up) {
-  window.tickBid ? window.tickBid($("curBid"), bid, money) : ($("curBid").textContent = money(bid));
-  $("bidCount").textContent = count;
-  $("mark").style.left = Math.max(0, Math.min(100, (bid - low) / (high - low) * 100)) + "%";
-  $("minLine").textContent = "Minimum next bid: " + money(bid + lot.step);
-  $("delta").textContent = last ? `+${money(last)}  just now` : "";
-  if (!Number($("amt").value.replace(/\D/g, "")) || Number($("amt").value.replace(/\D/g, "")) < bid + lot.step) $("amt").value = money(bid + lot.step);
-  drawHist(rowNew);
+
+function paintWallet() {
+  const el = $("#walletLine"), w = s.wallet, l = s.lot;
+  if (!me()) { el.innerHTML = String(html`<p>Bids are held from your wallet, not charged. <a href="account.html?next=${encodeURIComponent("lot.html" + location.search)}">Sign in</a> to bid.</p>`); return; }
+  if (!w) { el.innerHTML = `<span class="skel" style="display:block;height:34px"></span>`; return; }
+  const held = s.held, others = Math.max(0, w.reserved - held);
+  el.className = "lt-wallet" + (held ? " is-leading" : "");
+  el.innerHTML = String(html`
+    <div><span class="mono lt-lab">Available</span><b class="tnum">${money(w.available)}</b></div>
+    <div class="lt-held"><span class="mono lt-lab">Held on this lot</span><b class="tnum">${money(held)}</b></div>
+    ${others ? html`<div><span class="mono lt-lab">Held elsewhere</span><b class="tnum">${money(others)}</b></div>` : ""}
+    <a class="linkish" href="wallet.html">Add funds</a>`);
 }
-const amtVal = () => Number($("amt").value.replace(/\D/g, "")) || 0;
-$("plus").onclick = () => { $("amt").value = money(amtVal() + lot.step); };
-$("minus").onclick = () => { $("amt").value = money(Math.max(bid + lot.step, amtVal() - lot.step)); };
-$("amt").addEventListener("blur", () => { $("amt").value = money(amtVal()); });
-function status(msg, cls) { const s = $("status"); s.textContent = msg; s.className = "mono lt-status " + (cls || ""); }
-function flash() { const b = document.querySelector(".lt-bidbox"); b.classList.remove("flash"); void b.offsetWidth; b.classList.add("flash"); }
-$("modeBid").onclick = () => { proxyMode = false; $("modeBid").classList.add("on"); $("modeProxy").classList.remove("on"); $("modeBid").setAttribute("aria-selected", true); $("modeProxy").setAttribute("aria-selected", false); $("goBtn").textContent = "Place bid"; };
-$("modeProxy").onclick = () => { proxyMode = true; $("modeProxy").classList.add("on"); $("modeBid").classList.remove("on"); $("modeProxy").setAttribute("aria-selected", true); $("modeBid").setAttribute("aria-selected", false); $("goBtn").textContent = "Set max"; };
-$("bidForm").addEventListener("submit", e => {
-  e.preventDefault();
-  if (left <= 0) return status("Auction closed.", "err");
-  const v = amtVal();
-  if (v < bid + lot.step) { status(`Bid must be at least ${money(bid + lot.step)}.`, "err"); return; }
-  if (proxyMode) { proxy = v; status(`Max bid set at ${money(v)}. We will bid for you in ${money(lot.step)} steps.`); say("Max bid saved"); return; }
-  bid = v; count++; last = lot.step; hist.unshift({ n: count, who: "You", amt: bid, t: Date.now(), you: true }); paint(true);
-  status("New high bid. You are the highest bidder.", ""); flash(); say("Bid placed: " + money(bid));
+
+let closedKey = "";
+function paintClosed() {
+  const l = s.lot, el = $("#bidbox");
+  const closed = l.status === "COMPLETED" || l.status === "CANCELLED";
+  const key = closed ? [l.status, l.bidderId, l.current, l.settledAt, me()].join("|") : "";
+  if (key === closedKey) return;                       // nothing changed: leave the panel (and a focused button) alone
+  closedKey = key;
+  el.querySelector(".lt-closed")?.remove();
+  $("#bidForm").hidden = closed;
+  if (!closed) return;
+  const won = l.bidderId && l.bidderId === me();
+  const body = l.status === "CANCELLED" ? html`<h3>Cancelled</h3><p>The seller withdrew this lot before it opened.</p>`
+    : !l.bidderId ? html`<h3>Closed without bids</h3><p>No bids were placed.</p>`
+    : won ? html`<h3>You won this lot</h3><p>Winning bid <b class="tnum">${money(l.current)}</b>. ${l.settledAt ? "The sale is settled: the held funds went to the seller." : "The sale is being settled."}</p><button class="btn btn-sm" id="receiptBtn">View receipt</button>`
+    : html`<h3>Sold</h3><p>Sold for <b class="tnum">${money(l.current)}</b> to ${bidderLabel(l.bidderId, me())}.${s.history.some(b => b.user_id === me()) ? " Your hold was released." : ""}</p>`;
+  const c = Object.assign(document.createElement("div"), { className: "lt-closed" + (won ? " is-won" : "") });
+  c.innerHTML = String(body);
+  $("#bidForm").before(c);
+  $("#receiptBtn")?.addEventListener("click", showReceipt);
+}
+
+function paintSnipe() {
+  const l = s.lot, el = $("#snipe"), left = secondsLeft(l, be.feed.serverNow());
+  const inWindow = l.status === "ACTIVE" && left <= SNIPE_WINDOW / 1000 && left > 0;
+  el.hidden = !inWindow;
+  if (inWindow) el.innerHTML = String(html`<b>Last two minutes.</b> A bid now moves the close to two minutes after the bid, so nobody is sniped. ${l.extensions ? `Extended ${l.extensions} of 10 times so far.` : ""}`);
+}
+
+/* the clock: server-aligned, ticks four times a second */
+function tick() {
+  const l = s.lot, now = be.feed.serverNow();
+  let left;
+  if (l.status === "NOT_ACTIVE") left = Math.max(0, Math.ceil((Date.parse(l.startsAt) - now) / 1000)); else left = secondsLeft(l, now);
+  $("#clock").textContent = l.status === "COMPLETED" ? "Closed" : l.status === "CANCELLED" ? "Cancelled" : clock(left);
+  $("#clock").classList.toggle("urgent", l.status === "ACTIVE" && left <= 120);
+  paintSnipe();
+  if (l.status === "ACTIVE" && left === 0 && !ending) { ending = true; setTimeout(() => { s.reload().finally(() => { ending = false; }); }, 1200); }
+}
+setInterval(tick, 250);
+
+/* the history */
+let newBidId = null;
+function paintHistory() {
+  const rows = s.history.slice(0, 6), n = s.lot.bids;
+  $("#histEmpty").hidden = rows.length > 0;
+  $("#hist").innerHTML = String(html`${rows.map((b, i) => html`<tr class="${b.user_id === me() ? "you" : ""}${b.id === newBidId ? " new" : ""}"><td>${n - i}</td><td>${bidderLabel(b.user_id, me())}</td><td>${money(b.amount)}</td><td>${ago(b.created_at, be.feed.serverNow())}</td></tr>`)}`);
+  if (newBidId && window.gsap && !reduceMotion()) { const r = $("#hist").firstElementChild; if (r) gsap.from(r, { autoAlpha: 0, y: -10, duration: .45, ease: "power2.out" }); }
+  newBidId = null;
+}
+setInterval(paintHistory, 15000);
+
+/* one repaint per frame, however many updates arrive (a stress run sends hundreds) */
+let raf = 0;
+const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintLot(); paintHistory(); }); };
+
+/* ---------------------------------------------------------------- reacting to the controller */
+function flash() { const b = $("#bidbox"); b.classList.remove("flash"); void b.offsetWidth; b.classList.add("flash"); }
+let prevCurrent = s.lot.current;
+s.on("lot", l => { if (l.current != null && prevCurrent != null && l.current > prevCurrent) { lastDelta = l.current - prevCurrent; flash(); } prevCurrent = l.current; schedule(); });
+s.on("history", schedule);
+s.on("wallet", () => { paintWallet(); });
+s.on("event", e => { if (e.bid) newBidId = e.bid.id; });
+s.on("extended", x => {
+  toast("A late bid extended the close");
+  const c = $("#clock"); c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump");
+  $("#snipe").hidden = false; $("#snipe").innerHTML = String(html`<b>Close extended.</b> A bid in the last two minutes moved the end to ${dateTime(x.to)}. Extension ${x.extensions} of 10.`);
 });
-function rival() {
-  if (left <= 0) return;
-  bid += lot.step; count++; last = lot.step; hist.unshift({ n: count, who: names[Math.floor(Math.random() * 3)], amt: bid, t: Date.now(), you: false });
-  let youWereHigh = hist[1] && hist[1].you;
-  if (proxy && bid + lot.step <= proxy) { setTimeout(() => { bid += lot.step; count++; hist.unshift({ n: count, who: "You", amt: bid, t: Date.now(), you: true }); paint(true); status("Your max bid raised the price. You are the highest bidder."); }, 900); }
-  else if (youWereHigh) status("You have been outbid. Raise your bid to take the lead.", "out");
-  paint(true); flash();
-}
-setInterval(() => { left = Math.max(0, left - 1); $("clock").textContent = [Math.floor(left / 3600), Math.floor(left % 3600 / 60), left % 60].map(pad).join(":"); if (left === 0) { $("liveTag").textContent = "Closed"; $("liveTag").classList.remove("on"); $("goBtn").disabled = true; } }, 1000);
-setInterval(() => drawHist(false), 30000);
-(function loop() { setTimeout(() => { rival(); loop(); }, 22000 + Math.random() * 18000); })();
-$("liveTag").classList.add("on"); $("amt").value = money(bid + lot.step); paint(false);
-$("clock").textContent = [Math.floor(left / 3600), Math.floor(left % 3600 / 60), left % 60].map(pad).join(":");
+s.on("outbid", o => {
+  const hold = money(o.hold ?? 0);
+  showResult({ kind: "outbid", message: `You were outbid by ${bidderLabel(o.by, me())} at ${money(o.amount)}. Your ${hold} hold was released and is available again.`, minimum: s.lot.minNext });
+});
+be.feed.on("state", () => schedule());
 
-/* save, share, theme */
-$("saveBtn").onclick = e => { const on = e.currentTarget.getAttribute("aria-pressed") !== "true"; e.currentTarget.setAttribute("aria-pressed", on); e.currentTarget.textContent = on ? "Saved" : "Save"; };
-$("shareBtn").onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(location.href) : Promise.reject()).then(() => say("Link copied"), () => say("Copy the address bar to share")); };
-const modeBtn = $("modeToggle");
-const setTheme = d => { d ? document.documentElement.setAttribute("data-theme", "dark") : document.documentElement.removeAttribute("data-theme"); modeBtn.setAttribute("aria-checked", d); try { localStorage.setItem("marque-theme", d ? "dark" : "light"); } catch (e) {} };
-modeBtn.setAttribute("aria-checked", document.documentElement.getAttribute("data-theme") === "dark");
-modeBtn.addEventListener("click", () => setTheme(modeBtn.getAttribute("aria-checked") !== "true"));
+const resultEl = $("#result");
+function showResult(o) {
+  resultEl.className = "lt-result r-" + o.kind;
+  resultEl.innerHTML = String(html`<p>${o.message}</p>${o.minimum ? html`<button class="btn btn-sm" data-rebid="${o.minimum}">Bid ${money(o.minimum)}</button>` : ""}${o.kind === "funds" ? html`<a class="btn btn-sm" href="wallet.html">Add funds</a>` : ""}`);
+}
+s.on("outcome", o => {
+  if (o.kind === "auth") { location.href = "account.html?next=" + encodeURIComponent("lot.html" + location.search); return; }
+  showResult(o);
+  if (o.kind === "leading") { holdInputUntil = Date.now() + 4000; follow(id); toast("Bid placed: " + money(o.amount)); }
+  if (o.kind === "duplicate") toast("Duplicate click ignored");
+});
+resultEl.addEventListener("click", e => {
+  const b = e.target.closest("[data-rebid]"); if (!b) return;
+  setAmount(+b.dataset.rebid); dirty = true; $("#bidForm").requestSubmit();
+});
+
+/* the form: a click is one intent; a second click on the same amount is the same bid */
+$("#bidForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!me()) { location.href = "account.html?next=" + encodeURIComponent("lot.html" + location.search); return; }
+  const l = s.lot, amount = amtCents();
+  if (!amount || amount < l.minNext) { showResult({ kind: "toolow", message: `The minimum bid is ${money(l.minNext)}.`, minimum: l.minNext }); setAmount(l.minNext); return; }
+  if (l.bidderId === me() && amount <= l.current && Date.now() > holdInputUntil) { showResult({ kind: "toolow", message: `You already lead at ${money(l.current)}. Enter a higher amount to raise your bid.` }); return; }
+  await s.place(amount);
+  schedule();
+});
+
+/* receipt for a won lot: the SETTLE journal from the ledger */
+async function showReceipt() {
+  const dlg = $("#receipt");
+  dlg.innerHTML = `<h2 id="rcTitle">Receipt</h2><p class="muted">Loading the ledger entry...</p>`;
+  dlg.showModal();
+  try {
+    const page = await be.ledger({ limit: 200 });
+    const lines = page.entries.filter(e => e.auction_id === id && e.kind === "SETTLE");
+    const tx = lines[0];
+    dlg.innerHTML = String(html`
+      <h2 id="rcTitle">Receipt</h2>
+      <p class="lead">${s.lot.title}</p>
+      <dl class="rc"><div><dt>Winning bid</dt><dd class="tnum">${money(s.lot.current)}</dd></div>
+        <div><dt>Paid from</dt><dd>Funds held for this lot</dd></div>
+        <div><dt>Settled</dt><dd>${tx ? dateTime(tx.created_at) : "Pending"}</dd></div>
+        <div><dt>Ledger journal</dt><dd class="tnum">${tx ? tx.transaction_id.slice(0, 13) + "..." : "Not posted yet"}</dd></div></dl>
+      <p class="small muted">Settlement is one journal whose lines sum to zero: your held funds leave, the seller's available balance rises by the same amount.</p>
+      <div class="pop-actions"><a class="btn btn-sm" href="wallet.html">Open the statement</a><button class="btn btn-line btn-sm" value="close" onclick="this.closest('dialog').close()">Close</button></div>`);
+  } catch (err) { dlg.innerHTML = String(html`<h2 id="rcTitle">Receipt</h2><p class="form-error">${err.message}</p><button class="btn btn-line btn-sm" onclick="this.closest('dialog').close()">Close</button>`); }
+}
+
+/* the demo tools */
+$("#traceBtn").addEventListener("click", e => trace.toggle(e.currentTarget));
+$("#stressBtn").addEventListener("click", e => { trace.open(e.currentTarget); setTimeout(() => $("#stress")?.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" }), 60); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) s.reload(); });
+
+if (s.me) follow(id);
+paintLot(); paintHistory(); tick();

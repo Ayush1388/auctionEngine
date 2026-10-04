@@ -28,7 +28,7 @@ func TestAdminRoutesNeedTheAdminRole(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, path := range []string{"/v1/admin/reconcile", "/v1/admin/outbox/failed"} {
+	for _, path := range []string{"/v1/admin/reconcile", "/v1/admin/outbox/failed", "/v1/admin/metrics"} {
 		if w, _ := a.request("GET", path, "", ""); w.Code != http.StatusUnauthorized {
 			t.Errorf("%s anonymous: %d", path, w.Code)
 		}

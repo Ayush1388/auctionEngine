@@ -3,10 +3,12 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/Ayush1388/auctionEngine/internal/httpx"
+	"github.com/Ayush1388/auctionEngine/internal/metrics"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
@@ -44,6 +46,22 @@ func (h *AdminHandler) Reconcile(w http.ResponseWriter, r *http.Request) {
 		"money_in_wallets":          report.WalletTotal,
 		"reserved_in_wallets":       report.ReservedTotal,
 		"active_reservations_total": report.ActiveReservationsTotal,
+	})
+}
+
+// Metrics handles GET /v1/admin/metrics: this instance's application metrics
+// as JSON, for the operator dashboard. It is the same data Prometheus scrapes
+// from the internal admin port, behind the admin role instead of a network
+// boundary, so a browser can read it.
+func (h *AdminHandler) Metrics(w http.ResponseWriter, r *http.Request) {
+	families, err := metrics.Snapshot()
+	if err != nil {
+		httpx.ServerError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"time":     time.Now().UTC(),
+		"families": families,
 	})
 }
 

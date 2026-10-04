@@ -105,4 +105,22 @@ type Result struct {
 
 	CurrentBid int64
 	BidCount   int
+
+	// Timings are the phases of the transaction that handled this request,
+	// also set when the bid was refused (then only the phases that ran). They
+	// are zero for the optimistic strategy.
+	Timings Timings
 }
+
+// Timings splits a bid's transaction into the phases a person can reason
+// about. The API reports them in a Server-Timing header so a client can show
+// where the time of one bid went.
+type Timings struct {
+	Lock   time.Duration // waiting for the auction row (SELECT ... FOR UPDATE)
+	Decide time.Duration // the rules, checked on locked data
+	Write  time.Duration // bid, reservation, ledger journals, auction update, outbox event
+	Commit time.Duration // the COMMIT round trip
+}
+
+// IsZero reports whether no phase was measured.
+func (t Timings) IsZero() bool { return t == Timings{} }
