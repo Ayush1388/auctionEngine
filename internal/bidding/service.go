@@ -152,15 +152,21 @@ func (s *Service) placeBid(ctx context.Context, in PlaceBidInput) (Result, error
 
 // placePessimistic: lock, check, write.
 func (s *Service) placePessimistic(ctx context.Context, in PlaceBidInput) (Result, error) {
-	var res Result
+	var (
+		res   Result
+		tm    Timings
+		fnEnd time.Time
+	)
 
 	err := database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
 		// 1. Lock the auction row. Every other bid on this auction now
 		//    waits here until we commit or roll back.
+		t0 := time.Now()
 		a, err := getAuction(ctx, tx, in.AuctionID, true)
 		if err != nil {
 			return err
 		}
+		tm.Lock = time.Since(t0)
 
 		// 2. Idempotency check *after* the lock: a concurrent duplicate of
 		//    this request that got the lock first has committed by now,
@@ -174,16 +180,27 @@ func (s *Service) placePessimistic(ctx context.Context, in PlaceBidInput) (Resul
 		}
 
 		// 3. Decide on data nobody else can change until we commit.
+		t1 := time.Now()
 		p, err := decide(a, in.UserID, in.Amount, s.now())
 		if err != nil {
 			return err
 		}
+		tm.Decide = time.Since(t1)
 
 		// 4. Write everything.
+		t2 := time.Now()
 		res, err = apply(ctx, tx, a, in, p, s.now(), false)
+		tm.Write = time.Since(t2)
+		fnEnd = time.Now()
 		return err
 	})
 
+	// Report the phases even when the bid was refused: a bid that lost the race
+	// shows how long it waited behind the winner's transaction (Lock).
+	if err == nil && !res.Replayed && !fnEnd.IsZero() {
+		tm.Commit = time.Since(fnEnd)
+	}
+	res.Timings = tm
 	return res, err
 }
 

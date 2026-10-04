@@ -129,6 +129,30 @@ type update struct {
 	Type    string   `json:"type"`
 	Cause   string   `json:"cause"`
 	Auction Snapshot `json:"auction"`
+
+	// Bid and Timing are set for bid.placed only. They let a client tell
+	// WHICH bid caused the change (to match its own request, or to know it was
+	// outbid) and how long the event waited in the outbox. Both are additive:
+	// clients that only read the snapshot are unaffected.
+	Bid    *PlacedBid `json:"bid,omitempty"`
+	Timing *Timing    `json:"timing,omitempty"`
+}
+
+// PlacedBid identifies the bid behind a bid.placed update.
+type PlacedBid struct {
+	ID               uuid.UUID  `json:"id"`
+	BidderID         uuid.UUID  `json:"bidder_id"`
+	PreviousBidderID *uuid.UUID `json:"previous_bidder_id"`
+	Amount           int64      `json:"amount"`
+	Extended         bool       `json:"extended"`
+}
+
+// Timing lets a client work out how long the event spent between the commit
+// and the push. Both timestamps come from the API's clock, so their
+// difference needs no clock sync with the browser.
+type Timing struct {
+	PlacedAt time.Time `json:"placed_at"`
+	SentAt   time.Time `json:"sent_at"`
 }
 
 // EventHandler turns outbox events into live updates. Like the search
@@ -155,7 +179,22 @@ func EventHandler(load func(context.Context, uuid.UUID) (auction.Auction, error)
 			return err
 		}
 
-		msg, err := json.Marshal(update{Type: "auction.updated", Cause: event.EventType, Auction: SnapshotOf(a)})
+		u := update{Type: "auction.updated", Cause: event.EventType, Auction: SnapshotOf(a)}
+		if event.EventType == bidding.EventTypePlaced {
+			var placed bidding.PlacedEvent
+			if err := outbox.DecodePayload(event, &placed); err == nil && placed.BidID != uuid.Nil {
+				u.Bid = &PlacedBid{
+					ID:               placed.BidID,
+					BidderID:         placed.BidderID,
+					PreviousBidderID: placed.PreviousBidderID,
+					Amount:           placed.Amount,
+					Extended:         placed.Extended,
+				}
+				u.Timing = &Timing{PlacedAt: placed.PlacedAt.UTC(), SentAt: time.Now().UTC()}
+			}
+		}
+
+		msg, err := json.Marshal(u)
 		if err != nil {
 			return err
 		}
