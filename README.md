@@ -20,6 +20,18 @@ make up                              # the full stack, healthy, in one command
 make e2e                             # drive it end to end from outside
 ```
 
+[![Two windows, one lot: two people bid in the same instant, then Behind the bid and Stress it](docs/media/demo-poster.png)](docs/media/demo.mp4)
+
+*Forty seconds, real backend, two windows: two people bid in the same instant and exactly one wins; the loser is told the new minimum and how long it waited behind the winner; **Behind the bid** shows every hop of a bid with measured timings; **Stress it** fires 200 bidders at one lot and checks the result from outside.* ([watch the video](docs/media/demo.mp4))
+
+```bash
+make infra && cp .env.example .env && make migrate && make run     # the API on :4000 (set RATE_LIMITS=off in .env for Stress it)
+go run ./cmd/demobots seed && go run ./cmd/demobots serve          # the catalogue, and the Stress it bots
+cd frontend && python3 -m http.server 5173                         # http://localhost:5173
+```
+
+No backend? The frontend runs alone on a built-in demo engine with the same rules, so a hosted copy works for anyone: publish the `frontend/` folder to any static host. Details: [`docs/FRONTEND.md`](docs/FRONTEND.md).
+
 ---
 
 ## Contents
@@ -28,6 +40,7 @@ make e2e                             # drive it end to end from outside
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [How a bid works](#how-a-bid-works)
+- [The frontend](#the-frontend)
 - [Features in depth](#features-in-depth)
 - [API](#api)
 - [Running it](#running-it)
@@ -139,6 +152,32 @@ POST /v1/auctions/{id}/bids   Idempotency-Key: 7f3c…   {"amount": 4200}
 With `Prefer: respond-async`, the API instead writes a `bid_request` and an outbox event in one commit and returns **202**. The relay publishes it to Kafka keyed by auction, and a bid worker runs the same transaction above, in order.
 
 ---
+
+## The frontend
+
+The site is plain HTML, CSS and ES modules (no build step) and exists to make the backend visible.
+
+```mermaid
+flowchart LR
+    subgraph Browser
+      UI[Pages: lot, wallet, bids, sell, search, status] --> BE{backend.js}
+      BE -->|API answers| LIVE[live.js: REST + WebSocket]
+      BE -->|no API| SIM[sim.js: demo engine, same rules]
+    end
+    LIVE -->|REST, Server-Timing| API[API gateway]
+    LIVE -->|auction.updated| WS[WebSocket hub]
+    API --> SVC[Bidding service] --> PG[(PostgreSQL)]
+    PG --> OB[Outbox] --> RD[(Redis pub/sub)] --> WS
+    BOTS[cmd/demobots] -->|200 real HTTP bidders| API
+```
+
+What it shows, each backed by an endpoint you can read in the [API](#api) table:
+
+- **Live bidding.** A bid in one window appears in the others within milliseconds. Two bidders in the same instant: one wins, the other is told the new minimum and how long it queued behind the winner.
+- **Correctness you can see.** Money is held when you lead and released the moment you are outbid; a late bid extends the close; double-clicking Bid places one bid (same `Idempotency-Key`).
+- **Behind the bid.** One bid's journey (gateway, row lock, rules, write, commit, outbox, WebSocket) from `Server-Timing` and event timestamps, each number labelled with its source.
+- **Stress it.** 200 bidders read one price and bid together; the page checks the history is strictly increasing, counts match, one bidder leads and nothing failed. This check found a real ordering bug in `bids.created_at` (fixed, see [decision 0006](docs/decisions/0006-bid-concurrency.md)).
+- **A product around it.** Accounts with token rotation, a wallet with a double-entry statement, my bids, selling, search with fallback, alerts, a status dashboard and an operator console.
 
 ## Features in depth
 
@@ -381,6 +420,7 @@ Optional pieces turn on when their setting is present: `REDIS_URL`, `ELASTICSEAR
 | HTTP and gRPC | status codes, error shapes, deadlines, error details | part of the suite |
 | End to end | the deployed stack driven from outside, through every component | `make up && make e2e` |
 | Deploy | rolling deploy under constant traffic must drop zero requests | CI |
+| Frontend | the demo engine must follow the backend's rules, including 500 random bids that keep every ledger invariant | `node --test frontend/tests/sim-engine.test.mjs` |
 
 Integration tests skip themselves when their service isn't configured, so `go test ./...` always works. CI runs everything on every pull request, against real services.
 
@@ -396,6 +436,7 @@ cmd/
   migrate/        migration CLI (up, or -down N)
   admin/          operator CLI (promote, demote, reindex)
   loadgen/        load generator
+  demobots/       demo data and the Stress it bots for the frontend
 internal/
   auction/        state machine, service, repository, lifecycle worker, keyset pagination
   bidding/        placing bids (two locking strategies), history, settlement
@@ -417,7 +458,8 @@ migrations/       versioned up/down SQL
 deploy/           production stack: compose.yml, Caddyfile, Prometheus, Grafana, scripts
 e2e/              end-to-end test against the deployed stack
 loadtest/         k6 script
-docs/             decisions, deployment, performance, workflow
+frontend/         the web app (plain HTML, CSS and ES modules); see docs/FRONTEND.md
+docs/             decisions, deployment, performance, workflow, frontend
 ```
 
 ---
@@ -436,9 +478,10 @@ docs/             decisions, deployment, performance, workflow
 | v0.8 Kafka ✅ | outbox relay, partitioning by auction, consumer groups, idempotent consumers, DLQ |
 | v0.9 gRPC ✅ | bidding service, streaming, deadlines, interceptors, error details, safe retries |
 | v1.0 Production ✅ | metrics, tracing, probes, circuit breakers, load tests, deployment, e2e in CI |
-| Next | web frontend |
+| v1.1 Frontend ✅ | live bidding UI, Behind the bid, Stress it, wallet and ledger, selling, search, alerts, status and operator pages, a demo engine that needs no server |
 
 - **Why it's built this way:** [`docs/decisions/`](docs/decisions/) (15 decision records)
+- **The frontend and its demo engine:** [`docs/FRONTEND.md`](docs/FRONTEND.md)
 - **Deploying and operating it:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - **Load test results and the fixes they led to:** [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
 - **How work is done (issues, branches, PRs):** [`docs/WORKFLOW.md`](docs/WORKFLOW.md)

@@ -22,3 +22,6 @@ Many users bid on one auction at the same moment. Each bid reads the current bid
 - Throughput per auction is bounded by one bid per transaction round trip (~290 accepted bids/s locally; see `BenchmarkPlaceBid`). Different auctions proceed in parallel.
 - Kafka partitioning by `auction_id` (v0.8) gives the same per-auction ordering at the queue level.
 - Removing `FOR UPDATE`, or locking wallets in request order, is caught by `TestConcurrentBidsOnOneAuction` and `TestCrossAuctionBidsDoNotDeadlock`.
+
+## Addendum: `created_at` is when the bid won the lock
+`bids.created_at` used to come from the column default, `now()`, which is the time the *transaction started*. A bid that queued on the auction row kept a timestamp from before it won the lock, so under contention the history (ordered by `created_at`) could list a lower bid after a higher one, even though every accepted amount was correct. The insert now stores `clock_timestamp()`, which is evaluated when the statement runs, after the row lock is held, so timestamps follow the order bids were accepted. The frontend's "Stress it" read-back found this; `TestBidCreatedAtIsWhenItWonTheLock` holds the lock itself to reproduce it deterministically and fails on both strategies without the fix.

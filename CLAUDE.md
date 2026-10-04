@@ -13,3 +13,14 @@ Design direction: vintage-car auction brand. Cream `#F8FAED`, red `#AD221D`, bla
 Run the frontend locally with `cd frontend && python3 -m http.server 5173`.
 
 Playwright lives outside the repo (installed in a scratchpad); reinstall with `npm i playwright && npx playwright install chromium` if needed. Linux needs `sudo npx playwright install-deps chromium` once.
+
+## The app layer (`frontend/app/`)
+
+The pages talk to a backend through `app/backend.js`: the real API when it answers (`localhost:4000`), otherwise the built-in demo engine (`app/sim.js`, rules in `app/sim-engine.js`). Both implement the same interface, so a change to the interface needs both (`live.js` and `sim.js`). Full guide: `docs/FRONTEND.md`.
+
+- New pages: ES modules under `app/pages/`, header and footer from `app/shell.js` (`initShell({ bar: true, footer: true })`), styles from `app/app.css` and `app/pages.css`. Do not use a `.num` class (the home page owns it); use `.tnum`.
+- Everything from the network goes through the `html` tagged template in `app/util.js`, which escapes. Never put API text into `innerHTML` any other way.
+- Test both engines: `?engine=sim` and `?engine=live`. Live needs Postgres and Redis, `make migrate`, the API with `RATE_LIMITS=off` and `CORS_ALLOWED_ORIGINS=http://localhost:5173`, `go run ./cmd/demobots seed`, and `go run ./cmd/demobots serve` for Stress it. Demo accounts: `demo@marque.test`, `collector@marque.test`, `admin@marque.test`, password `marque-demo-password`.
+- The demo engine's rules have tests: `node --test frontend/tests/sim-engine.test.mjs`. Keep them green when changing `sim-engine.js`.
+- No em dashes in visible copy (use a hyphen or restructure the sentence).
+- Go files in this repo are committed with CRLF line endings, the frontend with LF. Keep each file's existing endings (check with `git ls-files --eol`).

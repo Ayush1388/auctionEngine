@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
@@ -290,6 +291,24 @@ func TestConcurrentBidsOnOneAuction(t *testing.T) {
 				e.count(`SELECT count(*) FROM bids WHERE auction_id = $1`, a), len(wins))
 		}
 
+		// The history is read in created_at order, so created_at must follow the
+		// order the bids won the auction row's lock. Under contention a bid that
+		// waits keeps the time its transaction STARTED if the column uses now(),
+		// which lets a lower bid appear after a higher one.
+		rows, err := e.pool.Query(context.Background(), `SELECT amount FROM bids WHERE auction_id = $1 ORDER BY created_at, id`, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		amounts, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 1; i < len(amounts); i++ {
+			if amounts[i] <= amounts[i-1] {
+				t.Fatalf("history is out of order at row %d: %d came after %d (all: %v)", i, amounts[i], amounts[i-1], amounts)
+			}
+		}
+
 		// Only the leader has money held, and exactly the winning amount.
 		for _, u := range users {
 			w := e.wallet(u)
@@ -302,6 +321,57 @@ func TestConcurrentBidsOnOneAuction(t *testing.T) {
 			}
 		}
 		e.reconcile()
+	})
+}
+
+// The bid history is ordered by created_at, so created_at has to be when a bid
+// won the auction row's lock, not when its transaction started. With now() as
+// the column default (the transaction's start time) a bid that queued behind
+// another kept its earlier timestamp, and under contention a lower bid could be
+// listed after a higher one. The test holds the lock itself so the order is not
+// left to chance: a real PlaceBid starts and waits; the "winner" stores its bid
+// meanwhile; the waiting bid then commits last and must be stored last.
+func TestBidCreatedAtIsWhenItWonTheLock(t *testing.T) {
+	forEachStrategy(t, func(t *testing.T, e *env) {
+		seller, winner, waiter := e.user(0), e.user(1_000_000), e.user(1_000_000)
+		a := e.activeAuction(seller, 100, 10, time.Hour)
+
+		ctx := context.Background()
+		tx, err := e.pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM auctions WHERE id = $1 FOR UPDATE`, a); err != nil {
+			t.Fatal(err)
+		}
+
+		done := make(chan error, 1)
+		go func() { _, err := e.bid(a, waiter, 200); done <- err }()
+		time.Sleep(300 * time.Millisecond) // the waiting bid's transaction has started and is blocked on the row
+
+		if _, err := tx.Exec(ctx, `INSERT INTO bids (id, auction_id, user_id, amount, created_at) VALUES ($1, $2, $3, 150, clock_timestamp())`,
+			uuid.New(), a, winner); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-done; err != nil {
+			t.Fatalf("the waiting bid should be accepted once the lock is free: %v", err)
+		}
+
+		rows, err := e.pool.Query(ctx, `SELECT amount FROM bids WHERE auction_id = $1 ORDER BY created_at, id`, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		amounts, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(amounts) != 2 || amounts[0] != 150 || amounts[1] != 200 {
+			t.Fatalf("history order by created_at is %v, want [150 200]: the bid that waited for the lock must be stored after the one that won it", amounts)
+		}
 	})
 }
 

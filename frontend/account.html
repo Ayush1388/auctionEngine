@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | Sign in</title>
+  <meta name="description" content="Sign in or create a Marque account to bid on vintage cars.">
+  <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="app/pages.css">
+</head>
+<body>
+<header id="appbar"></header>
+
+<main class="auth">
+  <aside class="auth-side" aria-label="How bidding works">
+    <img src="assets/hero.jpg" alt="" class="auth-photo">
+    <div class="auth-copy">
+      <h2>Bids are held, not charged</h2>
+      <ul>
+        <li>A bid sets that money aside in your wallet. If someone outbids you, it comes back at once.</li>
+        <li>Win, and the held amount is paid to the seller. Every movement is a ledger journal that sums to zero.</li>
+        <li>Sign in as two different people in two windows to watch a bid land on both screens.</li>
+      </ul>
+    </div>
+  </aside>
+
+  <section class="auth-main" aria-labelledby="authTitle">
+    <div id="authBody" aria-busy="true"><div class="skel" style="height:320px"></div></div>
+  </section>
+</main>
+
+<footer id="appfooter"></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app/pages/account.js"></script>
+</body>
+</html>

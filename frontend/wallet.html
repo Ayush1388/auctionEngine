@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | Wallet</title>
+  <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="app/pages.css">
+</head>
+<body>
+<header id="appbar"></header>
+
+<main class="page" id="main">
+  <div class="page-head">
+    <div><h1>Wallet</h1><p>Money you bid is held here, then released if you are outbid or paid out if you win. Every movement is on the statement.</p></div>
+  </div>
+  <div class="split" id="walletBody" aria-busy="true">
+    <section class="wallet-card" aria-label="Balance">
+      <div class="skel" style="height:260px"></div>
+    </section>
+    <section aria-label="Statement"><div class="skel" style="height:420px"></div></section>
+  </div>
+</main>
+
+<footer id="appfooter"></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app/pages/wallet.js"></script>
+</body>
+</html>

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
@@ -120,12 +122,14 @@ func (h *BidHandler) Place(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	started := time.Now()
 	res, err := h.service.PlaceBid(r.Context(), bidding.PlaceBidInput{
 		AuctionID:      auctionID,
 		UserID:         userID,
 		Amount:         req.Amount,
 		IdempotencyKey: r.Header.Get("Idempotency-Key"),
 	})
+	setBidTiming(w, r, time.Since(started), res.Timings)
 
 	var tooLow *bidding.BidTooLowError
 
@@ -164,6 +168,33 @@ func (h *BidHandler) Place(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
 	default:
 		httpx.ServerError(w, r, err)
+	}
+}
+
+// setBidTiming reports where the time of a bid went, so a client can show it.
+//
+// Server-Timing (W3C) carries the phases of the transaction measured by the
+// bidding service, plus "bidding", the whole call as the gateway saw it (with
+// a separate bidding service that includes the gRPC hop). X-Trace-ID is the
+// OpenTelemetry trace of the request when tracing is on, so the client can
+// link to the trace. Both are exposed to browsers by the CORS middleware.
+func setBidTiming(w http.ResponseWriter, r *http.Request, total time.Duration, t bidding.Timings) {
+	ms := func(d time.Duration) string { return strconv.FormatFloat(float64(d.Microseconds())/1000, 'f', 2, 64) }
+
+	var parts []string
+	if !t.IsZero() {
+		parts = append(parts,
+			"lock;dur="+ms(t.Lock),
+			"decide;dur="+ms(t.Decide),
+			"write;dur="+ms(t.Write),
+			"commit;dur="+ms(t.Commit),
+		)
+	}
+	parts = append(parts, "bidding;dur="+ms(total))
+	w.Header().Set("Server-Timing", strings.Join(parts, ", "))
+
+	if sc := trace.SpanContextFromContext(r.Context()); sc.IsValid() {
+		w.Header().Set("X-Trace-ID", sc.TraceID().String())
 	}
 }
 

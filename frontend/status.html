@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | System status</title>
+  <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="app/pages.css"><link rel="stylesheet" href="app/ops.css">
+</head>
+<body>
+<header id="appbar"></header>
+
+<main class="page ops">
+  <div class="page-head">
+    <div><h1>System status</h1><p>What the engine is doing right now: health checks, bids per second, how long a bid takes, and what is waiting in the queues.</p></div>
+    <a class="btn btn-line" href="admin.html">Operator console</a>
+  </div>
+  <div id="statusBody" aria-busy="true"><div class="skel" style="height:240px"></div></div>
+</main>
+
+<footer id="appfooter"></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app/pages/status.js"></script>
+</body>
+</html>

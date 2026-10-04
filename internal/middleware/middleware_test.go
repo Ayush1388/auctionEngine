@@ -81,6 +81,17 @@ func TestCORS(t *testing.T) {
 		!strings.Contains(w.Header().Get("Access-Control-Allow-Headers"), "Idempotency-Key") {
 		t.Fatalf("allowed preflight: %d %v", w.Code, w.Header())
 	}
+	// A browser can only read these response headers when they are exposed: the frontend's
+	// "behind the bid" panel shows them.
+	simple := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/v1/auctions", nil)
+	r.Header.Set("Origin", "https://app.example.com")
+	h.ServeHTTP(simple, r)
+	for _, name := range []string{"X-Request-ID", "X-Trace-ID", "Server-Timing"} {
+		if !strings.Contains(simple.Header().Get("Access-Control-Expose-Headers"), name) {
+			t.Errorf("%s is not exposed to browsers: %q", name, simple.Header().Get("Access-Control-Expose-Headers"))
+		}
+	}
 	if w := preflight("https://evil.example"); w.Code != 403 || w.Header().Get("Access-Control-Allow-Origin") != "" {
 		t.Fatalf("disallowed preflight: %d %v", w.Code, w.Header())
 	}

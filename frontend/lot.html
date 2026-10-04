@@ -7,23 +7,16 @@
   <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="lot.css">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="lot.css"><link rel="stylesheet" href="app/trace.css">
 </head>
 <body>
-<header class="lt-bar">
-  <a class="brand" href="index.html" aria-label="Marque home"><svg viewBox="0 0 40 32" width="40" height="32" aria-hidden="true"><path fill="currentColor" d="M0 14 8 0h24l8 14-6 4-5-9H11l-5 9zM6 24l6-4h16l6 4-4 8H10z"/></svg></a>
-  <nav class="lt-nav" aria-label="Primary"><a href="index.html#classic">Classics</a><a href="index.html#muscle">Muscle</a><a href="index.html#events">Events</a><a href="index.html#sell">Sell a car</a><a href="index.html#how">How it works</a></nav>
-  <div class="lt-actions">
-    <button class="mode" id="modeToggle" role="switch" aria-checked="false" aria-label="Noir mode"><span class="mono mode-label">Noir</span><span class="mode-track"><span class="mode-knob"></span></span></button>
-    <a class="btn" href="#join">Join now</a>
-  </div>
-</header>
+<header id="appbar"></header>
 
-<main class="lt">
+<main class="lt" id="lotMain" aria-busy="true">
   <div class="lt-grid">
     <div class="lt-left">
       <div class="lt-stage">
-        <img id="gMain" src="" alt="">
+        <img id="gMain" src="assets/hero.jpg" alt="">
         <a class="lt-back mono" id="backLink" href="index.html">Back to auction</a>
         <div class="lt-arrows"><button class="arrow" id="gPrev" aria-label="Previous view">‹</button><button class="arrow" id="gNext" aria-label="Next view">›</button></div>
         <span class="lt-count mono" id="gCount">01 / 04</span>
@@ -37,51 +30,57 @@
     <aside class="lt-right">
       <div class="lt-nextprev mono"><a id="prevLot" href="#">Prev lot</a><a id="nextLot" href="#">Next lot</a></div>
       <div class="lt-top">
-        <p class="mono lt-lotline"><span id="lotNo"></span><span class="lt-live" id="liveTag">Live auction</span></p>
+        <p class="mono lt-lotline"><span id="lotNo"></span><span class="lt-live" id="liveTag">Connecting</span></p>
         <div class="lt-tools"><button class="lt-tool" id="saveBtn" aria-pressed="false">Save</button><button class="lt-tool" id="shareBtn">Share</button></div>
       </div>
-      <h1 id="lotTitle"></h1>
+      <h1 id="lotTitle"><span class="skel" style="display:block;height:48px;width:80%"></span></h1>
       <p class="lt-sub" id="lotSub"></p>
       <ul class="lt-chips" id="chips"></ul>
 
-      <section class="lt-bidbox" aria-label="Bidding">
+      <section class="lt-bidbox" id="bidbox" aria-label="Bidding">
         <div class="lt-bid-row">
-          <div><span class="mono lt-lab">Current bid</span><strong id="curBid" class="lt-big"></strong><span class="lt-delta" id="delta"></span></div>
-          <div class="lt-cell"><span class="mono lt-lab">Bids</span><strong id="bidCount" class="lt-mid"></strong></div>
-          <div class="lt-cell"><span class="mono lt-lab">Time remaining</span><strong class="lt-clock" id="clock"></strong></div>
+          <div><span class="mono lt-lab">Current bid</span><strong id="curBid" class="lt-big">-</strong><span class="lt-delta" id="delta"></span></div>
+          <div class="lt-cell"><span class="mono lt-lab">Bids</span><strong id="bidCount" class="lt-mid">-</strong></div>
+          <div class="lt-cell"><span class="mono lt-lab" id="clockLab">Time remaining</span><strong class="lt-clock" id="clock">--:--:--</strong></div>
         </div>
+
+        <div class="lt-snipe" id="snipe" hidden role="status"></div>
+
         <div class="lt-range"><div class="lt-range-bar"><i id="mark"></i></div><div class="lt-range-lab mono"><span id="estLow"></span><span id="resv"></span><span id="estHigh"></span></div></div>
-        <div class="lt-seg" role="tablist"><button class="on" id="modeBid" role="tab" aria-selected="true">Place bid</button><button id="modeProxy" role="tab" aria-selected="false">Set max (proxy)</button></div>
-        <form class="lt-form" id="bidForm">
-          <div class="lt-field"><button type="button" id="minus" aria-label="Decrease">−</button><label class="visually" for="amt">Bid amount</label><input id="amt" inputmode="numeric" autocomplete="off"><button type="button" id="plus" aria-label="Increase">+</button></div>
+
+        <div class="lt-wallet" id="walletLine"></div>
+
+        <form class="lt-form" id="bidForm" novalidate>
+          <div class="lt-field"><button type="button" id="minus" aria-label="Decrease">−</button><label class="visually" for="amt">Bid amount in dollars</label><input id="amt" inputmode="numeric" autocomplete="off"><button type="button" id="plus" aria-label="Increase">+</button></div>
           <button class="btn lt-go" id="goBtn" type="submit">Place bid</button>
         </form>
         <p class="lt-min" id="minLine"></p>
-        <p class="lt-status mono" id="status" role="status" aria-live="polite"></p>
+        <div class="lt-result" id="result" role="status" aria-live="polite"></div>
+
+        <div class="lt-demo">
+          <button class="btn btn-line btn-sm" id="traceBtn" aria-controls="trace">Behind the bid</button>
+          <button class="btn btn-line btn-sm" id="stressBtn" aria-controls="trace">Stress it</button>
+        </div>
       </section>
 
       <section class="lt-history" aria-label="Bid history">
-        <div class="lt-hist-head"><h2>Live Bid History</h2><span class="mono lt-live">Live updates</span></div>
+        <div class="lt-hist-head"><h2>Live Bid History</h2><span class="mono lt-live" id="histLive">Live updates</span></div>
         <table><thead><tr><th>#</th><th>Bidder</th><th>Amount</th><th>Time</th></tr></thead><tbody id="hist"></tbody></table>
+        <p class="lt-hist-empty" id="histEmpty" hidden>No bids yet. The first bid sets the price.</p>
       </section>
     </aside>
   </div>
 </main>
 
-<section class="lt-quote" id="quoteBand"><img id="qImg" src="" alt=""><div class="lt-quote-in"><p class="mono" id="qEvent"></p><blockquote id="qText"></blockquote></div><a class="mono" id="qLink" href="#">Explore the event</a></section>
+<section class="lt-quote" id="quoteBand" hidden><img id="qImg" src="" alt=""><div class="lt-quote-in"><p class="mono" id="qEvent"></p><blockquote id="qText"></blockquote></div><a class="mono" id="qLink" href="#">Explore the event</a></section>
 
-<footer class="footer" id="join">
-  <div class="footer-top"><h2 class="wordmark small">MARQUE</h2>
-    <div class="footer-cols">
-      <nav aria-label="Auctions"><h3 class="mono">Auctions</h3><ul><li><a href="index.html#classic">Classic legends</a></li><li><a href="index.html#muscle">Midnight muscle</a></li><li><a href="index.html#events">Upcoming events</a></li></ul></nav>
-      <nav aria-label="Company"><h3 class="mono">Marque</h3><ul><li><a href="index.html#sell">Sell a car</a></li><li><a href="index.html#how">How it works</a></li><li><a href="#join">Contact</a></li></ul></nav>
-      <form class="join-form" onsubmit="return false"><label class="mono" for="email">Auction alerts</label><div><input id="email" type="email" placeholder="you@email.com" autocomplete="email"><button class="btn" type="submit">Join now</button></div></form>
-    </div></div>
-  <div class="footer-bottom"><p class="mono">© 2026 Marque Auctions. Bid responsibly.</p><p class="mono"><a href="#join">Terms</a> &nbsp; <a href="#join">Privacy</a> &nbsp; <a href="#join">Buyer’s guide</a></p></div>
-</footer>
+<dialog class="sheet" id="receipt" aria-labelledby="rcTitle"></dialog>
+
+<footer id="appfooter"></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-<script src="lots.js"></script><script src="lot.js"></script><script src="motion.js"></script>
+<script type="module" src="lot.js"></script>
+<script src="motion.js"></script>
 </body>
 </html>
