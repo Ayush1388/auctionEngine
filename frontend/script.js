@@ -1,4 +1,4 @@
-// Demo-only behaviour: slideshow, drawer, countdowns, simulated bids. No backend calls yet.
+// Slideshow, drawer, hero clock and the static fallback for the cards. When the backend answers, app/cards.js takes the cards over.
 const fmtMoney = n => "$" + n.toLocaleString("en-US");
 const pad = n => String(n).padStart(2, "0");
 const fmtClock = s => { s = Math.max(0, s); return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map(pad).join(":"); };
@@ -109,7 +109,7 @@ cards.forEach(c => {
   c.timeEl.textContent = fmtClock(c.remaining);
   c.el.classList.toggle("urgent", c.remaining < 1800);
   c.btn.addEventListener("click", () => {
-    if (c.remaining <= 0) return;
+    if (window.marqueLive || c.remaining <= 0) return;      // live cards place real bids (app/cards.js)
     c.bid += c.step; c.count++; render(c, true); say("Bid placed: " + fmtMoney(c.bid));
   });
   c.heart.addEventListener("click", () => {
@@ -128,6 +128,7 @@ heroClock.textContent = fmtHero(heroRemaining);
 setInterval(() => {
   heroRemaining = Math.max(0, heroRemaining - 1);
   heroClock.textContent = fmtHero(heroRemaining);
+  if (window.marqueLive) return;
   cards.forEach(c => {
     if (c.remaining <= 0) return;
     c.remaining--;

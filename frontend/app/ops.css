@@ -1,0 +1,59 @@
+/* Operator pages: dense, flat, mono numerals, hairlines instead of cards. */
+.ops .h3 { font: 400 26px/1 var(--display); letter-spacing: .01em; color: var(--fg); }
+.tscroll { position: relative; overflow-x: auto; max-width: 100%; }
+.ops-sec, .ops-sec > * { min-width: 0; }
+.ops-sec { margin-top: clamp(28px, 4vw, 52px); display: grid; gap: 14px; }
+.ops-sec:first-child { margin-top: 0; }
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ops-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: clamp(28px, 4vw, 52px) 0 20px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.ops-filters .lab { margin-right: 6px; }
+.ops-filters .small { margin-left: auto; }
+
+.probes { display: grid; border-top: 1px solid var(--line); }
+.probe { display: grid; grid-template-columns: 72px 160px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 48px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.state { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid currentColor; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; width: max-content; }
+.state.ok { color: var(--ok); background: var(--ok-bg); }
+.state.warn { color: var(--warn); background: var(--warn-bg); }
+.state.bad { color: var(--accent); background: var(--bad-bg); }
+
+.ops-hero { display: grid; grid-template-columns: minmax(240px, 4fr) minmax(0, 8fr); gap: clamp(20px, 4vw, 56px); align-items: end; }
+.hero { display: block; margin: 6px 0 8px; font: 500 clamp(56px, 7vw, 96px)/1 var(--mono); color: var(--accent); }
+.ops-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 4vw, 56px); margin-top: clamp(28px, 4vw, 52px); align-items: start; }
+.chart-card { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); border-top: 1px solid var(--line); }
+.tile { display: grid; gap: 4px; align-content: start; padding: 16px 16px 16px 0; border-bottom: 1px solid var(--line); }
+.tile b { font: 500 clamp(24px, 2.4vw, 32px)/1.15 var(--mono); }
+
+/* charts: one data colour, hairline grid, text in text tokens */
+.chart { position: relative; }
+.chart svg { display: block; overflow: visible; }
+.ch-grid { stroke: var(--line); stroke-width: 1; }
+.ch-line { fill: none; stroke: var(--red); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ch-area { fill: var(--red); opacity: .1; }
+.ch-dot { fill: var(--red); stroke: var(--bg); stroke-width: 2; }
+.ch-cross { stroke: var(--fg-soft); stroke-width: 1; }
+.ch-muted { fill: var(--fg-soft); font: 400 11px var(--mono); }
+.ch-end { fill: var(--fg); font: 500 12px var(--mono); }
+.chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.ch-tip { position: absolute; z-index: 5; pointer-events: none; display: grid; gap: 1px; padding: 8px 12px; border-radius: 8px; background: var(--fg); color: var(--bg); box-shadow: 0 10px 24px -14px var(--shadow); white-space: nowrap; }
+.ch-tip b { font: 500 15px var(--mono); }
+.ch-tip span { font: 400 11px var(--mono); opacity: .75; }
+.tview { margin-top: 2px; }
+.tview summary { cursor: pointer; width: max-content; list-style: none; }
+.tview summary::-webkit-details-marker { display: none; }
+.tview .tbl { margin-top: 10px; max-width: 420px; }
+.tview > div { max-height: 260px; overflow: auto; }
+
+.verdict { display: grid; gap: 4px; padding: 18px 20px; border-radius: var(--r-surface); border: 1.5px solid currentColor; }
+.verdict b { font: 400 clamp(34px, 4vw, 52px)/1 var(--display); letter-spacing: .01em; }
+.verdict span { color: var(--fg); max-width: 70ch; font-size: 15px; }
+.verdict.ok { color: var(--ok); background: var(--ok-bg); }
+.verdict.bad { color: var(--accent); background: var(--bad-bg); }
+.err-text { max-width: 44ch; font: 400 12px/1.5 var(--mono); color: var(--fg-soft); overflow-wrap: anywhere; }
+
+@media (max-width: 1000px) {
+  .ops-hero, .ops-two { grid-template-columns: 1fr; }
+  .probe { grid-template-columns: 72px 1fr; }
+  .probe .small { grid-column: 2; }
+  .ops-filters .small { margin-left: 0; width: 100%; }
+}
