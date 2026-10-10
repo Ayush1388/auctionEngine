@@ -57,6 +57,22 @@ type Config struct {
 	// RateLimitsEnabled can be switched off for load testing.
 	RateLimitsEnabled bool
 
+	// ChaosEnabled lets an operator inject faults (internal/chaos) from the
+	// admin API. Off by default; never enable it on a production instance.
+	ChaosEnabled bool
+
+	// DemoBotsEnabled builds the demo bots into the API (internal/demobots):
+	// rival bidders and Stress it, switched on and off from the website.
+	// DemoSeed loads the car catalogue at start-up when no lot is open.
+	// DemoCatalog is the path of frontend/app/catalog.json.
+	DemoBotsEnabled bool
+	DemoSeed        bool
+	DemoCatalog     string
+
+	// DemoAdminEmail and DemoAdminPassword give the seeded operator a private
+	// login instead of the public demo one.
+	DemoAdminEmail, DemoAdminPassword string
+
 	// WSMaxConnections caps WebSocket connections per instance (v0.7).
 	// Past it, new connections are refused with "try again later" rather
 	// than degrading everyone already connected.
@@ -274,6 +290,12 @@ func Load() (Config, error) {
 		InternalToken:      os.Getenv("INTERNAL_TOKEN"),
 		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
 		RateLimitsEnabled:  rateLimits,
+		ChaosEnabled:       os.Getenv("CHAOS_ENABLED") == "true",
+		DemoBotsEnabled:    os.Getenv("DEMO_BOTS_ENABLED") == "true",
+		DemoSeed:           os.Getenv("DEMO_SEED") == "true",
+		DemoCatalog:        envOr("DEMO_CATALOG", "frontend/app/catalog.json"),
+		DemoAdminEmail:     os.Getenv("DEMO_ADMIN_EMAIL"),
+		DemoAdminPassword:  os.Getenv("DEMO_ADMIN_PASSWORD"),
 
 		RedisURL:    os.Getenv("REDIS_URL"),
 		RedisPrefix: envOr("REDIS_PREFIX", "ae:"),

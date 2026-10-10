@@ -1,0 +1,16 @@
+# Showcase overrides: ONE API instance, so the chaos switch and the demo bots act
+# on the instance that serves every bid. (With two instances a fault would hit
+# only the one that received the toggle.) Use it on top of compose.yml:
+#
+#   docker compose -f deploy/compose.yml -f deploy/showcase.yml up -d --build --wait
+#
+# Needs Docker Compose 2.24 or newer (for !override).
+services:
+  api-2:
+    profiles: ["ha"]            # not started unless --profile ha is given
+  caddy:
+    environment:
+      API_UPSTREAMS: api-1:4000
+    depends_on: !override
+      api-1:
+        condition: service_started
