@@ -27,6 +27,7 @@ type PlacedEvent struct {
 	EndsAt           time.Time  `json:"ends_at"`
 	Extended         bool       `json:"extended"`
 	PlacedAt         time.Time  `json:"placed_at"`
+	Auto             bool       `json:"auto,omitempty"`
 }
 
 type SettledEvent struct {

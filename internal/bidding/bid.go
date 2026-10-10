@@ -77,6 +77,9 @@ type Bid struct {
 	UserID    uuid.UUID
 	Amount    int64
 	CreatedAt time.Time
+
+	// Auto is true for a bid placed by the engine on a proxy instruction.
+	Auto bool
 }
 
 // PlaceBidInput is what a client sends.
@@ -88,6 +91,9 @@ type PlaceBidInput struct {
 	// IdempotencyKey comes from the Idempotency-Key header. Optional; when
 	// present, retries with the same key return the original bid.
 	IdempotencyKey string
+
+	// auto marks a bid the engine placed for a proxy (maximum) instruction.
+	auto bool
 }
 
 // Result is what PlaceBid returns.
@@ -105,6 +111,11 @@ type Result struct {
 
 	CurrentBid int64
 	BidCount   int
+
+	// Countered is set when a proxy instruction answered this bid at once, so
+	// the bidder is no longer leading. CurrentBid, BidCount and EndsAt then
+	// describe the auction after the answer.
+	Countered bool
 
 	// Timings are the phases of the transaction that handled this request,
 	// also set when the bid was refused (then only the phases that ran). They
@@ -124,3 +135,7 @@ type Timings struct {
 
 // IsZero reports whether no phase was measured.
 func (t Timings) IsZero() bool { return t == Timings{} }
+
+// BreakerFailure classifies errors for a breaker in front of bidding: only
+// "bidding is unavailable" counts, not a refused bid.
+func BreakerFailure(err error) bool { return errors.Is(err, ErrUnavailable) }

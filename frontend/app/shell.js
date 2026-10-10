@@ -32,7 +32,7 @@ export function wireTheme(btn = $("#modeToggle")) {
 
 /* ------------------------------------------------------------------ markup */
 const LOGO = `<svg viewBox="0 0 40 32" width="40" height="32" aria-hidden="true"><path fill="currentColor" d="M0 14 8 0h24l8 14-6 4-5-9H11l-5 9zM6 24l6-4h16l6 4-4 8H10z"/></svg>`;
-const NAV = [["Classics", "index.html#classic"], ["Muscle", "index.html#muscle"], ["Events", "index.html#events"], ["Search", "search.html"], ["Sell a car", "sell.html"]];
+const NAV = [["Classics", "index.html#classic"], ["Muscle", "index.html#muscle"], ["Events", "index.html#events"], ["Search", "search.html"], ["Sell a car", "sell.html"], ["Backend", "tour.html"]];
 
 function barHTML() {
   return `
@@ -50,7 +50,7 @@ function footerHTML() {
       <div class="footer-cols">
         <nav aria-label="Auctions"><h3 class="mono">Auctions</h3><ul><li><a href="index.html#classic">Classic legends</a></li><li><a href="index.html#muscle">Midnight muscle</a></li><li><a href="index.html#events">Upcoming events</a></li><li><a href="search.html">Search and trending</a></li></ul></nav>
         <nav aria-label="Account"><h3 class="mono">Your account</h3><ul><li><a href="bids.html">My bids</a></li><li><a href="wallet.html">Wallet and statement</a></li><li><a href="sell.html">Sell a car</a></li></ul></nav>
-        <nav aria-label="Under the hood"><h3 class="mono">Under the hood</h3><ul><li><a href="status.html">System status</a></li><li><a href="admin.html">Operator console</a></li><li><a href="https://github.com/Ayush1388/auctionEngine#readme" rel="noopener">How it is built</a></li></ul></nav>
+        <nav aria-label="Under the hood"><h3 class="mono">Under the hood</h3><ul><li><a href="tour.html">How the backend works</a></li><li><a href="status.html">System status</a></li><li><a href="system.html">Architecture map</a></li><li><a href="chaos.html">Chaos lab</a></li><li><a href="trust.html">Trust page</a></li><li><a href="race.html">Race theater</a></li><li><a href="searchlab.html">Search lab</a></li><li><a href="formats.html">Auction formats</a></li><li><a href="admin.html">Operator console</a></li><li><a href="https://github.com/Ayush1388/auctionEngine#readme" rel="noopener">How it is built</a></li></ul></nav>
       </div>
     </div>
     <div class="footer-bottom"><p class="mono">© 2026 Marque Auctions. Bid responsibly.</p></div>`;
@@ -168,8 +168,17 @@ function engineBadge() {
   const el = document.createElement("div");
   el.className = "engine";
   el.innerHTML = `
-    <button class="engine-pill ${live ? "is-live" : "is-demo"}" id="enginePill" aria-expanded="false" aria-controls="enginePanel"><i aria-hidden="true"></i><span>${live ? "Live backend" : "Demo engine"}</span></button>
+    <button class="engine-pill ${live ? "is-live" : "is-demo"}" id="enginePill" aria-expanded="false" aria-controls="enginePanel"><i aria-hidden="true"></i><span>${live ? "Live backend" : "Demo engine"}</span><b class="tnum" id="pulseMs"></b></button>
     <div class="pop pop-engine" id="enginePanel" hidden>
+      <div class="botsrow" id="botsRow" hidden>
+        <div><b>Demo bots</b><span class="small" id="botsNote"></span></div>
+        <button class="switch" id="botsSwitch" role="switch" aria-checked="false" aria-label="Demo bots"></button>
+      </div>
+      <div class="pulse" id="pulse" aria-live="off"><div class="pulse-head"><b>System pulse</b><span class="mono" id="pulseState">checking</span></div>
+        <svg class="pulse-spark" id="pulseSpark" viewBox="0 0 240 36" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <ul class="pulse-list" id="pulseList"></ul>
+        <div class="pop-actions"><a class="btn btn-line btn-sm" href="system.html">Architecture map</a><a class="btn btn-line btn-sm" href="chaos.html">Chaos lab</a></div>
+      </div>
       ${live ? `<h3>Connected to the real API</h3>
         <p>Every bid on this page goes to <b class="mono">${esc(detail)}</b>: PostgreSQL, the outbox and a WebSocket. Timings in the Behind the bid panel are measured.</p>
         <p class="engine-ws mono" id="engineWs">WebSocket: waiting for a lot</p>
@@ -181,8 +190,73 @@ function engineBadge() {
   document.body.append(el);
   bindPopover($("#enginePill"), $("#enginePanel"));
   $("#engineReset")?.addEventListener("click", () => { if (confirm("Reset the demo? Accounts, bids and balances go back to the start.")) be.reset(); });
+  startPulse();
+  wireBots();
   if (live) be.feed.on("state", s => { const w = $("#engineWs"); if (w) w.textContent = "WebSocket: " + ({ open: "open", connecting: "connecting", retrying: `reconnecting in ${Math.round((s.retryIn || 0) / 100) / 10} s`, closed: "closed", idle: "waiting for a lot" })[s.state]; });
 }
+
+/* ------------------------------------------------------------------ demo bots switch */
+// Rival bidders that keep a quiet site alive. In the demo engine they run in this
+// browser; on the real API they are built in (DEMO_BOTS_ENABLED=true) and this
+// switch is the only thing needed: no second server.
+let botsBusy = false, botsState = null;
+async function paintBots() {
+  const row = $("#botsRow"); if (!row || !be.bots) return;
+  try { botsState = await be.bots.get(); } catch { botsState = null; }
+  const sw = $("#botsSwitch"), note = $("#botsNote");
+  row.hidden = false;
+  if (!botsState || !botsState.enabled) {
+    sw.disabled = true; sw.setAttribute("aria-checked", "false");
+    note.textContent = botsState ? "Not built into this API. Start it with DEMO_BOTS_ENABLED=true." : "Cannot reach the API.";
+    return;
+  }
+  const a = botsState.ambient || {}, signedIn = !!be.session.id || be.kind === "sim";
+  sw.setAttribute("aria-checked", String(!!a.on));
+  sw.disabled = botsBusy || !signedIn;
+  note.textContent = !signedIn ? "Sign in to switch them on."
+    : a.on ? `On: ${a.bids} bids placed so far. Stress it on a lot page uses them too.`
+    : "Off. Switch on for rival bidders on every open lot. Stress it works either way.";
+}
+function wireBots() {
+  const sw = $("#botsSwitch"); if (!sw) return;
+  sw.addEventListener("click", async () => {
+    botsBusy = true; sw.disabled = true;
+    try { botsState = await be.bots.setAmbient(sw.getAttribute("aria-checked") !== "true"); toast(botsState.ambient.on ? "Demo bots on" : "Demo bots off"); }
+    catch (e) { toast(e.message || "Could not change the demo bots"); }
+    botsBusy = false; paintBots();
+  });
+  paintBots();
+}
+
+/* ------------------------------------------------------------------ system pulse */
+// A small always-there readout of the engine: is every dependency answering, and how long
+// does a round trip take. It reads the public probes, so it works for every visitor.
+const pulseRtt = [];
+export const pulse = new Emitter();           // "tick" { ok, state, checks, ms, history }
+async function pulseOnce() {
+  if (document.hidden) return;
+  let ready = null, ms = null;
+  try { const l = await be.livez(); ms = l.ms; } catch { /* shown as down */ }
+  try { ready = await be.readyz(); } catch (e) { ready = e.body?.checks ? e.body : null; }
+  const checks = ready?.checks || {};
+  const failing = Object.entries(checks).filter(([, v]) => v !== "ok").map(([k]) => k);
+  const state = ms == null || ready?.status === "unavailable" ? "bad" : failing.length ? "warn" : "ok";
+  if (ms != null) { pulseRtt.push(ms); if (pulseRtt.length > 40) pulseRtt.shift(); }
+  const btn = $("#enginePill"), label = $("#pulseMs");
+  if (btn) btn.dataset.state = state;
+  if (label) label.textContent = ms != null ? (ms < 10 ? ms.toFixed(1) : Math.round(ms)) + " ms" : "down";
+  const st = $("#pulseState"); if (st) st.textContent = ({ ok: "All systems answering", warn: failing.length + " degraded", bad: "Not answering" })[state];
+  const list = $("#pulseList");
+  if (list) list.innerHTML = Object.entries({ api: ms != null ? "ok" : "failing", ...checks }).map(([k, v]) => `<li class="${v === "ok" ? "ok" : "bad"}"><span>${esc(k)}</span><b class="mono">${v === "ok" ? "ok" : "failing"}</b></li>`).join("");
+  const sp = $("#pulseSpark");
+  if (sp && pulseRtt.length > 1) {
+    const hi = Math.max(...pulseRtt, 1), pts = pulseRtt.map((v, i) => `${(i / (pulseRtt.length - 1) * 240).toFixed(1)},${(34 - v / hi * 30).toFixed(1)}`).join(" ");
+    sp.innerHTML = `<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  }
+  paintBots();
+  pulse.emit("tick", { ok: state === "ok", state, checks, ms, history: [...pulseRtt] });
+}
+function startPulse() { pulseOnce(); setInterval(pulseOnce, 5000); }
 
 /* ------------------------------------------------------------------ boot */
 /**

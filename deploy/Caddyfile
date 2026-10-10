@@ -10,7 +10,7 @@
 	@internal path /metrics /debug/*
 	respond @internal 404
 
-	reverse_proxy api-1:4000 api-2:4000 {
+	reverse_proxy {$API_UPSTREAMS:api-1:4000 api-2:4000} {
 		# Send each request to the instance with the fewest open requests.
 		lb_policy least_conn
 

@@ -80,6 +80,13 @@ x-api: &api
     # bidworker container, so the API runs no bid workers itself.
     BIDDING_GRPC_ADDR: biddingsvc:50051
     BID_WORKERS: "0"
+    # Showcase switches (all off by default). See docs/SHOWCASE-DEPLOY.md.
+    CHAOS_ENABLED: ${CHAOS_ENABLED:-false}
+    DEMO_BOTS_ENABLED: ${DEMO_BOTS_ENABLED:-false}
+    DEMO_SEED: ${DEMO_SEED:-false}
+    DEMO_CATALOG: /app/catalog.json
+    DEMO_ADMIN_EMAIL: ${DEMO_ADMIN_EMAIL:-}
+    DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
     # Only Caddy (on this private network) may set X-Forwarded-For.
     TRUSTED_PROXIES: 172.28.0.0/16
     # Keep serving for 5 s after SIGTERM while Caddy's health check notices

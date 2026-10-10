@@ -51,7 +51,7 @@ func (s *Service) History(ctx context.Context, auctionID uuid.UUID, limitParam, 
 	}
 
 	query := `
-		SELECT id, auction_id, user_id, amount, created_at
+		SELECT id, auction_id, user_id, amount, created_at, auto
 		FROM bids
 		WHERE auction_id = $1`
 	args := []any{auctionID}

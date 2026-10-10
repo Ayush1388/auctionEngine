@@ -20,8 +20,11 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
 	"github.com/Ayush1388/auctionEngine/internal/bidqueue"
 	"github.com/Ayush1388/auctionEngine/internal/breaker"
+	"github.com/Ayush1388/auctionEngine/internal/chaos"
+	"github.com/Ayush1388/auctionEngine/internal/chaoswrap"
 	"github.com/Ayush1388/auctionEngine/internal/config"
 	"github.com/Ayush1388/auctionEngine/internal/database"
+	"github.com/Ayush1388/auctionEngine/internal/demobots"
 	"github.com/Ayush1388/auctionEngine/internal/email"
 	"github.com/Ayush1388/auctionEngine/internal/grpcsvc"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
@@ -150,6 +153,7 @@ func main() {
 			logger.Info("connected to Redis")
 		}
 		defer rdb.Close()
+		rdb.AddHook(chaos.RedisHook{})
 		checker.Add("redis", false, func(ctx context.Context) error { return rdb.Ping(ctx).Err() })
 	}
 
@@ -261,6 +265,11 @@ func main() {
 		bidder = client.WithBreaker(newBreaker("bidding-grpc", grpcsvc.BreakerFailure))
 		logger.Info("bidding via gRPC", "addr", cfg.BiddingGRPCAddr)
 	}
+	if cfg.ChaosEnabled {
+		chaos.Enable()
+		logger.Warn("CHAOS_ENABLED: operators can inject faults through /v1/admin/chaos")
+		bidder = chaoswrap.GuardedBidder{Next: bidder, B: newBreaker("bidding", bidding.BreakerFailure)}
+	}
 
 	// --------------------------------------------------
 	// Kafka (v0.8, optional)
@@ -281,7 +290,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer producer.Close()
-		checker.Add("kafka", false, producer.Ping)
+		checker.Add("kafka", false, chaos.Ping(chaos.Kafka, producer.Ping))
 
 		topicCtx, cancelTopics := context.WithTimeout(context.Background(), 15*time.Second)
 		if err := kafkax.EnsureTopics(topicCtx, producer, topics, int16(cfg.KafkaReplication)); err != nil {
@@ -294,9 +303,10 @@ func main() {
 		cancelTopics()
 
 		relay := kafkax.NewRelay(producer, topics, bidqueue.EventTypeRequested)
-		outboxRouter.Register(bidqueue.EventTypeRequested, relay.Handler())
+		relayHandler := chaoswrap.Handler(chaos.Kafka, relay.Handler())
+		outboxRouter.Register(bidqueue.EventTypeRequested, relayHandler)
 		for _, eventType := range auctionEvents {
-			outboxRouter.Register(eventType, relay.Handler())
+			outboxRouter.Register(eventType, relayHandler)
 		}
 
 		bidRequests = bidqueue.NewRequests(db)
@@ -358,7 +368,7 @@ func main() {
 	var primarySearch search.Backend
 	if cfg.ElasticsearchURL != "" {
 		elastic := search.NewElastic(cfg.ElasticsearchURL, cfg.ElasticsearchIndex)
-		checker.Add("elasticsearch", false, elastic.Ping)
+		checker.Add("elasticsearch", false, chaos.Ping(chaos.Elasticsearch, elastic.Ping))
 
 		ensureCtx, cancelEnsure := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := elastic.EnsureIndex(ensureCtx); err != nil {
@@ -506,6 +516,28 @@ func main() {
 	// HTTP server
 	// --------------------------------------------------
 
+	// Demo bots (v1.2): built in, off until the website switches them on. They
+	// bid through the same bidder the HTTP handlers use, so the chaos switch
+	// and the breakers apply to them too.
+	var demoHandler *demobots.Handler
+	if cfg.DemoBotsEnabled {
+		bots := demobots.New(demobots.Options{Pool: db, Bidder: bidder, Auctions: auctionService, Wallets: walletService, Logger: logger})
+		demoHandler = demobots.NewHandler(bots, cfg.DemoCatalog)
+		logger.Warn("DEMO_BOTS_ENABLED: demo bots can be switched on from the website; do not enable this in production")
+		if cfg.DemoSeed {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				res, err := bots.Seed(ctx, demobots.SeedOptions{Catalog: cfg.DemoCatalog, AdminEmail: cfg.DemoAdminEmail, AdminPassword: cfg.DemoAdminPassword})
+				if err != nil {
+					logger.Error("demo seed failed", "error", err)
+					return
+				}
+				logger.Info("demo catalogue ready", "created", res.Created, "kept", res.Kept)
+			}()
+		}
+	}
+
 	srv := server.New(
 		cfg.Port,
 		server.Routes(server.Deps{
@@ -516,6 +548,9 @@ func main() {
 			Bids:     handlers.NewBidHandler(bidder).WithQueue(bidRequests),
 			Wallets:  handlers.NewWalletHandler(walletService),
 			Admin:    handlers.NewAdminHandler(walletService, outboxRepository),
+			Chaos:    handlers.NewChaosHandler(),
+			Proxy:    handlers.NewProxyHandler(biddingService),
+			Demo:     demoHandler,
 
 			Auth:     authMiddleware,
 			Health:   checker,

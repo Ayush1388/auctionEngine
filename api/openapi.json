@@ -1149,6 +1149,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Replay of an earlier request with the same Idempotency-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceBidResponse"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Bid accepted",
             "content": {
@@ -1159,12 +1169,12 @@
               }
             }
           },
-          "200": {
-            "description": "Replay of an earlier request with the same Idempotency-Key",
+          "202": {
+            "description": "Queued (Prefer: respond-async). Poll status_url or watch the WebSocket feed.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlaceBidResponse"
+                  "$ref": "#/components/schemas/BidRequest"
                 }
               }
             }
@@ -1243,16 +1253,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "202": {
-            "description": "Queued (Prefer: respond-async). Poll status_url or watch the WebSocket feed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BidRequest"
                 }
               }
             }
@@ -1544,16 +1544,6 @@
               }
             }
           },
-          "409": {
-            "description": "Books do not balance",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          },
           "401": {
             "description": "Not logged in",
             "content": {
@@ -1570,6 +1560,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Books do not balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
                 }
               }
             }
@@ -2144,6 +2144,598 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/admin/chaos": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Fault switchboard state",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Switchboard state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "slow_query_ms": {
+                      "type": "integer"
+                    },
+                    "faults": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "403": {
+            "description": "Not an operator, or chaos is not enabled"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Break or restore one dependency (needs CHAOS_ENABLED=true)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fault": {
+                    "type": "string",
+                    "enum": [
+                      "redis",
+                      "kafka",
+                      "elasticsearch",
+                      "bidding",
+                      "postgres_slow"
+                    ]
+                  },
+                  "active": {
+                    "type": "boolean"
+                  },
+                  "slow_query_ms": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Switchboard state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "slow_query_ms": {
+                      "type": "integer"
+                    },
+                    "faults": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "403": {
+            "description": "Not an operator, or chaos is not enabled"
+          },
+          "422": {
+            "description": "Unknown fault"
+          }
+        }
+      }
+    },
+    "/v1/admin/chaos/reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Restore every dependency",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Switchboard state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "slow_query_ms": {
+                      "type": "integer"
+                    },
+                    "faults": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "403": {
+            "description": "Not an operator, or chaos is not enabled"
+          }
+        }
+      }
+    },
+    "/v1/auctions/{id}/proxy-bid": {
+      "put": {
+        "tags": [
+          "bids"
+        ],
+        "summary": "Set a maximum bid: the engine raises your bid for you, up to it",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "max_amount": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "The most this bidder will pay, in the smallest currency unit"
+                  }
+                },
+                "required": [
+                  "max_amount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The bidder's maximum and where it stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "max_amount": {
+                      "type": "integer"
+                    },
+                    "leading": {
+                      "type": "boolean"
+                    },
+                    "current_bid": {
+                      "type": "integer"
+                    },
+                    "bid_count": {
+                      "type": "integer"
+                    },
+                    "ends_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "403": {
+            "description": "Your own auction"
+          },
+          "404": {
+            "description": "No such auction"
+          },
+          "409": {
+            "description": "Auction not open"
+          },
+          "422": {
+            "description": "Below the minimum bid, or not enough funds"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "bids"
+        ],
+        "summary": "Your maximum bid on this auction",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The bidder's maximum and where it stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "max_amount": {
+                      "type": "integer"
+                    },
+                    "leading": {
+                      "type": "boolean"
+                    },
+                    "current_bid": {
+                      "type": "integer"
+                    },
+                    "bid_count": {
+                      "type": "integer"
+                    },
+                    "ends_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "404": {
+            "description": "No maximum set"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "bids"
+        ],
+        "summary": "Remove your maximum bid",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "404": {
+            "description": "No maximum set"
+          }
+        }
+      }
+    },
+    "/v1/demo/bots": {
+      "get": {
+        "tags": [
+          "demo"
+        ],
+        "summary": "Whether the demo bots are built in, and whether the rivals are on",
+        "responses": {
+          "200": {
+            "description": "Demo bot state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "ambient": {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean"
+                        },
+                        "bids": {
+                          "type": "integer"
+                        },
+                        "refused": {
+                          "type": "integer"
+                        },
+                        "interval": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "demo"
+        ],
+        "summary": "Switch the ambient rival bidders on or off",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ambient": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Demo bot state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "ambient": {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean"
+                        },
+                        "bids": {
+                          "type": "integer"
+                        },
+                        "refused": {
+                          "type": "integer"
+                        },
+                        "interval": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "404": {
+            "description": "Demo bots are not enabled"
+          }
+        }
+      }
+    },
+    "/v1/demo/stress": {
+      "post": {
+        "tags": [
+          "demo"
+        ],
+        "summary": "Start a Stress it run: many bidders, one price, one instant",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "auction_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "bidders": {
+                    "type": "integer"
+                  },
+                  "rounds": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "auction_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Started; read progress from the events stream"
+          },
+          "404": {
+            "description": "Demo bots are not enabled"
+          }
+        }
+      }
+    },
+    "/v1/demo/stress/{id}/events": {
+      "get": {
+        "tags": [
+          "demo"
+        ],
+        "summary": "Server-sent progress of a Stress it run",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "text/event-stream"
+          },
+          "404": {
+            "description": "Unknown run"
+          }
+        }
+      }
+    },
+    "/v1/demo/seed": {
+      "post": {
+        "tags": [
+          "demo"
+        ],
+        "summary": "Load the demo car catalogue and accounts (operator)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What was created"
+          },
+          "403": {
+            "description": "Not an operator"
+          },
+          "404": {
+            "description": "Demo bots are not enabled"
           }
         }
       }
