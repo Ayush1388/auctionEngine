@@ -170,3 +170,4 @@ function setTheme(dark) {
 }
 modeBtn.setAttribute("aria-checked", document.documentElement.getAttribute("data-theme") === "dark");
 modeBtn.addEventListener("click", () => setTheme(modeBtn.getAttribute("aria-checked") !== "true"));
+modeBtn.dataset.wired = "1";   // the shared shell must not add a second handler: two toggles cancel each other

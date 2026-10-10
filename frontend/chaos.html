@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marque | Chaos lab</title>
+  <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="app/pages.css"><link rel="stylesheet" href="app/ops.css"><link rel="stylesheet" href="app/lab.css">
+</head>
+<body>
+<header id="appbar"></header>
+
+<main class="page ops lab">
+  <div class="page-head">
+    <div><h1>Chaos lab</h1><p>Break one dependency at a time and keep bidding. Bids still land, a breaker opens, search falls back to PostgreSQL, and the page shows what happened.</p></div>
+    <a class="btn btn-line" href="system.html">Architecture map</a>
+  </div>
+  <div id="chaosBody" aria-busy="true"><div class="skel" style="height:320px"></div></div>
+</main>
+
+<footer id="appfooter"></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app/pages/chaos.js"></script>
+</body>
+</html>

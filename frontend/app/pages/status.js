@@ -1,9 +1,11 @@
 // System status. Probes are public; metrics are the operator's (GET /v1/admin/metrics).
 import { initShell } from "../shell.js";
+import { mountTourBar } from "../tour.js";
 import { lineChart, chartTable, quantile } from "../chart.js";
 import { html, raw, esc, $, $$, dur, usd } from "../util.js";
 
 const be = await initShell({ bar: true, footer: true, nav: "" });
+mountTourBar("observe");
 const body = $("#statusBody");
 const POLL = 2000, KEEP = 150;
 const WINDOWS = [["60", "1 minute"], ["180", "3 minutes"]];

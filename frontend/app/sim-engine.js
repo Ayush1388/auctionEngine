@@ -15,6 +15,7 @@
 //   - ACTIVE -> COMPLETED at ends_at, then the winner's reserve pays the seller
 import { uuid } from "./util.js";
 import { SNIPE_WINDOW, MAX_EXTENSIONS, MIN_DURATION, MAX_DURATION, MAX_START_DELAY } from "./rules.js";
+import { nextAutoBid } from "./proxy-rules.js";
 
 export { SNIPE_WINDOW, MAX_EXTENSIONS, MIN_DURATION, MAX_DURATION, MAX_START_DELAY };
 export const MAX_DEPOSIT = 1_000_000_000;   // the backend's wallet.MaxDeposit: $10,000,000 a deposit
@@ -41,6 +42,7 @@ export class World {
     this.order = [];                 // auction ids, oldest first
     this.bidLog = [];                // every accepted bid, in commit order
     this.idem = new Map();           // `${user}:${key}` -> { auctionId, amount, bidId }
+    this.proxies = new Map();        // `${auction}:${user}` -> { auctionId, userId, max, since }
     this.depositKeys = new Map();    // `${user}:${key}` -> wallet
     this.refreshTokens = new Map();  // token -> { userId, used }
     this.deadLetters = [];
@@ -249,22 +251,23 @@ export class World {
   }
 
   /** Typo-tolerant search over title and description (one edit per word), like the Elasticsearch path. */
-  search(q, { status, limit = 20, cursor } = {}) {
+  search(q, { status, limit = 20, cursor, mode = "es" } = {}) {
     const terms = String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) throw new SimError(400, "q is required");
-    const near = (w, t) => w.includes(t) || (t.length > 3 && w.length > 2 && editsWithin1(w, t));
+    // "pg" is the PostgreSQL fallback: whole words and prefixes only, no typo tolerance
+    const near = mode === "pg" ? (w, t) => w.startsWith(t) : (w, t) => w.includes(t) || (t.length > 3 && w.length > 2 && editsWithin1(w, t));
     const score = a => {
       const words = (a.item.name + " " + a.item.description).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
       let s = 0;
       for (const t of terms) {
-        if (a.item.name.toLowerCase().includes(t)) s += 3; else if (words.some(w => near(w, t))) s += 1; else return 0;
+        if (mode === "pg" ? a.item.name.toLowerCase().split(/[^a-z0-9]+/).some(w => w.startsWith(t)) : a.item.name.toLowerCase().includes(t)) s += 3; else if (words.some(w => near(w, t))) s += 1; else return 0;
       }
       return s;
     };
     let hits = [...this.auctions.values()].filter(a => !status || a.status === status).map(a => ({ a, s: score(a) })).filter(x => x.s > 0).sort((x, y) => y.s - x.s);
     const from = cursor ? Number(cursor) || 0 : 0;
     const page = hits.slice(from, from + limit);
-    return { auctions: page.map(x => ({ ...this.#public(x.a), highlight: highlight(x.a.item.name, terms) })), next_cursor: from + limit < hits.length ? String(from + limit) : null, backend: "demo" };
+    return { auctions: page.map(x => ({ ...this.#public(x.a), highlight: highlight(x.a.item.name, terms) })), next_cursor: from + limit < hits.length ? String(from + limit) : null, backend: mode === "pg" ? "postgres" : "demo" };
   }
 
   suggest(q, limit = 5) {
@@ -288,9 +291,13 @@ export class World {
    * `at` back-dates a seeded bid; `queue` is how many bids were ahead on this
    * auction in the same instant (it lengthens the simulated lock wait).
    */
-  placeBid(userId, auctionId, amount, key = "", { at, queue = 0 } = {}) {
+  placeBid(userId, auctionId, amount, key = "", { at, queue = 0, auto = false } = {}) {
     const t = at ?? this.now();
-    const result = (label, fn) => { try { const r = fn(); this.#count(r.replayed ? "replayed" : "accepted"); return r; } catch (e) { this.#count(label(e)); throw e; } };
+    // an automatic bid is part of the manual bid that caused it, so it is not counted as a request
+    const result = (label, fn) => {
+      try { const r = fn(); if (!auto) this.#count(r.replayed ? "replayed" : "accepted"); return r; }
+      catch (e) { if (!auto) this.#count(label(e)); throw e; }
+    };
     return result(e => (e instanceof SimError ? outcome(e) : "error"), () => {
       if (key.length > 255) throw new SimError(422, "idempotency key must be at most 255 characters");
       const a = this.#get(auctionId);
@@ -323,7 +330,7 @@ export class World {
       // write: release the old leader, reserve the new one, update the auction, all or nothing
       if (prevBidder && prevBidder !== userId) this.#post([{ user: prevBidder, account: "reserved", amount: -prevAmount, kind: "RELEASE", auction: a.id }, { user: prevBidder, account: "available", amount: prevAmount, kind: "RELEASE", auction: a.id }]);
       this.#post([{ user: userId, account: "available", amount: -reserve, kind: "RESERVE", auction: a.id }, { user: userId, account: "reserved", amount: reserve, kind: "RESERVE", auction: a.id }]);
-      const bid = { id: uuid(), auction_id: a.id, user_id: userId, amount, created_at: iso(t) };
+      const bid = { id: uuid(), auction_id: a.id, user_id: userId, amount, created_at: iso(t), ...(auto ? { auto: true } : {}) };
       a.bids.push(bid); this.bidLog.push(bid);
       a.current_bid = amount; a.current_bidder_id = userId; a.bid_count++; a.version++; a.updated_at = iso(t);
       if (extended) { a.ends_at = iso(t + SNIPE_WINDOW); a.extensions++; }
@@ -334,11 +341,65 @@ export class World {
       if (this.counters.durations.length > 2000) this.counters.durations.splice(0, 1000);
       this.#emit({
         type: "auction.updated", cause: "bid.placed", auction: this.#snapshot(a),
-        bid: { id: bid.id, bidder_id: userId, previous_bidder_id: prevBidder, amount, extended },
+        bid: { id: bid.id, bidder_id: userId, previous_bidder_id: prevBidder, amount, extended, ...(auto ? { auto: true } : {}) },
         timing: { placed_at: iso(t), sent_at: iso(t) },
       });
-      return { status: 201, replayed: false, timings, body: { bid: { ...bid }, current_bid: amount, bid_count: a.bid_count, ends_at: a.ends_at, extended, replayed: false } };
+      // standing maximum bids answer a manual bid at once, in the same step
+      let countered = false;
+      if (!auto) {
+        const n = this.#answer(a.id, t);
+        countered = n > 0 && a.current_bidder_id !== userId;
+      }
+      return { status: 201, replayed: false, timings, body: { bid: { ...bid }, current_bid: a.current_bid, bid_count: a.bid_count, ends_at: a.ends_at, extended, replayed: false, ...(countered ? { countered: true } : {}) } };
     });
+  }
+
+  /* ------------------------------------------------------------ maximum (proxy) bids */
+  #funds(a, userId) {
+    const w = this.wallets.get(userId) || { available: 0 };
+    return w.available + (a.current_bidder_id === userId && a.current_bid != null ? a.current_bid : 0);
+  }
+
+  /** Place the automatic bids that follow the current state. Returns how many. */
+  #answer(auctionId, t) {
+    let placed = 0;
+    for (let i = 0; i < 60; i++) {
+      const a = this.auctions.get(auctionId);
+      const list = [...this.proxies.values()].filter(p => p.auctionId === auctionId);
+      if (!list.length) break;
+      const next = nextAutoBid(a, list, u => this.#funds(a, u));
+      if (!next) break;
+      try { this.placeBid(next.userId, auctionId, next.amount, "", { at: t, auto: true }); placed++; } catch { break; }
+    }
+    return placed;
+  }
+
+  proxyOf(userId, auctionId) {
+    const p = this.proxies.get(auctionId + ":" + userId);
+    if (!p) throw new SimError(404, "no maximum bid set on this auction");
+    const a = this.#get(auctionId);
+    return { max_amount: p.max, leading: a.current_bidder_id === userId, current_bid: a.current_bid ?? 0, bid_count: a.bid_count, ends_at: a.ends_at };
+  }
+
+  /** Set or change a maximum. If it takes the lead, the bid is placed at once. */
+  setProxy(userId, auctionId, max) {
+    const a = this.#get(auctionId), t = this.now();
+    if (!Number.isInteger(max) || max <= 0) throw new SimError(422, "bid amount must be positive");
+    if (a.status === "COMPLETED" || (a.status === "ACTIVE" && t >= Date.parse(a.ends_at))) throw new SimError(409, "auction has ended");
+    if (a.status !== "ACTIVE" || t < Date.parse(a.starts_at)) throw new SimError(409, "auction is not accepting bids");
+    if (userId === a.owner_id) throw new SimError(403, "sellers cannot bid on their own auction");
+    const leading = a.current_bidder_id === userId;
+    const floor = leading ? a.current_bid + 1 : this.minimum(a);
+    if (max < floor) throw new SimError(422, `bid must be at least ${floor}`, { minimum_amount: floor });
+    if (!leading && (this.wallets.get(userId)?.available ?? 0) < this.minimum(a)) throw new SimError(422, "insufficient funds");
+    const key = auctionId + ":" + userId;
+    this.proxies.set(key, { auctionId, userId, max, since: this.proxies.get(key)?.since ?? t });
+    this.#answer(auctionId, t);
+    return this.proxyOf(userId, auctionId);
+  }
+
+  cancelProxy(userId, auctionId) {
+    if (!this.proxies.delete(auctionId + ":" + userId)) throw new SimError(404, "no maximum bid set on this auction");
   }
 
   /** Simulated phase costs in ms: small for a quiet auction, longer when bids queue on the row lock. */
@@ -418,8 +479,8 @@ export class World {
         fam("auction_outbox_dead_lettered", "gauge", "Outbox events parked after exhausting retries.", [{ value: this.deadLetters.length }]),
         fam("auction_outbox_events_total", "counter", "Outbox events handled.", [{ labels: { type: "bid.placed", result: "processed" }, value: this.counters.bids.accepted || 0 }]),
         fam("auction_ws_connections", "gauge", "Open WebSocket connections.", [{ value: extra.connections ?? 0 }]),
-        fam("auction_kafka_consumer_lag", "gauge", "Records waiting to be consumed.", [{ labels: { group: "bid-workers", topic: "auction-bids", partition: "0" }, value: extra.kafkaLag ?? 0 }]),
-        fam("auction_circuit_breaker_state", "gauge", "Circuit breaker state: 0 closed, 1 half-open, 2 open.", ["elasticsearch", "bidding", "smtp"].map(name => ({ labels: { name }, value: name === "smtp" && this.deadLetters.length ? 2 : 0 }))),
+        fam("auction_kafka_consumer_lag", "gauge", "Records waiting to be consumed.", (extra.kafkaLagParts || [extra.kafkaLag ?? 0]).map((value, i) => ({ labels: { group: "bid-workers", topic: "auction-bids", partition: String(i) }, value }))),
+        fam("auction_circuit_breaker_state", "gauge", "Circuit breaker state: 0 closed, 1 half-open, 2 open.", ["elasticsearch", "bidding", "smtp"].map(name => ({ labels: { name }, value: extra.breakers?.[name] ?? (name === "smtp" && this.deadLetters.length ? 2 : 0) }))),
         fam("auction_db_pool_acquired_connections", "gauge", "Connections currently in use.", [{ value: extra.dbBusy ?? 1 }]),
         fam("auction_db_pool_max_connections", "gauge", "Maximum size of the connection pool.", [{ value: 16 }]),
       ],
@@ -437,14 +498,14 @@ export class World {
   toJSON() {
     return {
       v: 1, seq: this.seq, users: [...this.users.values()], wallets: [...this.wallets], ledger: this.ledger, auctions: [...this.auctions.values()], order: this.order, bidLog: this.bidLog.length,
-      idem: [...this.idem], depositKeys: [...this.depositKeys.keys()], deadLetters: this.deadLetters, counters: this.counters, refresh: [...this.refreshTokens],
+      idem: [...this.idem], proxies: [...this.proxies.values()], depositKeys: [...this.depositKeys.keys()], deadLetters: this.deadLetters, counters: this.counters, refresh: [...this.refreshTokens],
     };
   }
   static fromJSON(j, opts) {
     const w = new World(opts);
     w.seq = j.seq; j.users.forEach(u => { w.users.set(u.id, u); w.emails.set(u.email.toLowerCase(), u.id); });
     w.wallets = new Map(j.wallets); w.ledger = j.ledger; j.auctions.forEach(a => w.auctions.set(a.id, a)); w.order = j.order;
-    w.idem = new Map(j.idem); j.depositKeys.forEach(k => w.depositKeys.set(k, true)); w.deadLetters = j.deadLetters; w.counters = j.counters; w.refreshTokens = new Map(j.refresh);
+    w.idem = new Map(j.idem); (j.proxies || []).forEach(p => w.proxies.set(p.auctionId + ":" + p.userId, p)); j.depositKeys.forEach(k => w.depositKeys.set(k, true)); w.deadLetters = j.deadLetters; w.counters = j.counters; w.refreshTokens = new Map(j.refresh);
     for (const a of w.auctions.values()) a.bids.forEach(b => w.bidLog.push(b));
     return w;
   }

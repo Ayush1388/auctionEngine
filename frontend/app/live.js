@@ -18,6 +18,12 @@ export function parseServerTiming(h) {
   return Object.keys(out).length ? out : null;
 }
 
+/** RateLimit-Limit / RateLimit-Remaining -> { limit, remaining } (null when the API sends none) */
+const rateOf = h => {
+  const limit = Number(h.get("ratelimit-limit")), remaining = Number(h.get("ratelimit-remaining"));
+  return h.get("ratelimit-limit") == null ? null : { limit, remaining };
+};
+
 const qs = o => {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(o || {})) if (v !== undefined && v !== null && v !== "") p.set(k, v);
@@ -101,13 +107,28 @@ export function createLive(base = config.api) {
       try {
         const r = await api.request("POST", `/v1/auctions/${auctionId}/bids`, { body: { amount }, headers, auth: true });
         return { ...base, ok: true, status: r.status, data: r.data, replayed: r.status === 200 || !!r.data?.replayed, queued: r.status === 202,
-          requestId: r.headers.get("x-request-id"), traceId: r.headers.get("x-trace-id"), serverTiming: parseServerTiming(r.headers.get("server-timing")),
+          requestId: r.headers.get("x-request-id"), traceId: r.headers.get("x-trace-id"), serverTiming: parseServerTiming(r.headers.get("server-timing")), rate: rateOf(r.headers),
           sentAt: r.sentAt, ms: r.ms, t0: r.t0 };
       } catch (e) {
         if (!(e instanceof ApiError)) throw e;
         return { ...base, ok: false, status: e.status, error: e, data: e.body, replayed: false, requestId: e.requestId, traceId: e.headers?.get("x-trace-id") || null,
-          serverTiming: parseServerTiming(e.headers?.get("server-timing")), sentAt: tSent, ms: performance.now() - tStart, t0: tStart };
+          serverTiming: parseServerTiming(e.headers?.get("server-timing")), rate: e.headers ? rateOf(e.headers) : null, sentAt: tSent, ms: performance.now() - tStart, t0: tStart };
       }
+    },
+    /* maximum (proxy) bids */
+    async setProxy(auctionId, max) { return (await api.request("PUT", `/v1/auctions/${auctionId}/proxy-bid`, { body: { max_amount: max }, auth: true })).data; },
+    async getProxy(auctionId) {
+      try { return (await api.get(`/v1/auctions/${auctionId}/proxy-bid`, { auth: true })).data; }
+      catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; }
+    },
+    async cancelProxy(auctionId) { await api.request("DELETE", `/v1/auctions/${auctionId}/proxy-bid`, { auth: true }); },
+
+    /* the operator's fault switchboard: /v1/admin/chaos (needs CHAOS_ENABLED=true on the API) */
+    chaos: {
+      get: async () => (await api.get("/v1/admin/chaos", { auth: true })).data,
+      set: async (fault, active, o = {}) => (await api.request("PUT", "/v1/admin/chaos", { body: { fault, active, ...(o.slowMs != null ? { slow_query_ms: o.slowMs } : {}) }, auth: true })).data,
+      reset: async () => (await api.post("/v1/admin/chaos/reset", undefined, { auth: true })).data,
+      setRateLimits: async () => { throw new ApiError(400, { error: "Rate limits on the real API are set with RATE_LIMITS=off" }, null); },
     },
     async bidRequest(id) { return (await api.get("/v1/bid-requests/" + id, { auth: true })).data; },
 
@@ -130,20 +151,44 @@ export function createLive(base = config.api) {
     async failedOutbox() { return (await api.get("/v1/admin/outbox/failed", { auth: true })).data.events; },
     async retryOutbox(id) { await api.post(`/v1/admin/outbox/${id}/retry`, undefined, { auth: true }); },
 
-    /* ---------- demo: many bidders at once (cmd/demobots) ---------- */
+    /* ---------- demo bots: built into the API (DEMO_BOTS_ENABLED=true), switched on and off here ---------- */
+    bots: {
+      /** { enabled, ambient: { on, bids, refused, ... }, message } */
+      async get() { return (await api.get("/v1/demo/bots")).data; },
+      async setAmbient(on) { return (await api.request("PUT", "/v1/demo/bots", { body: { ambient: !!on }, auth: true })).data; },
+    },
+
     stress: {
       async available() {
-        try { const r = await fetch(config.bots + "/health", { signal: AbortSignal.timeout(1200) }); return r.ok; } catch { return false; }
+        try { return !!(await api.get("/v1/demo/bots")).data.enabled; } catch { return false; }
       },
       /** Starts a run; emits {type:"progress"|"done"|"error"} to `onEvent`. Returns { stop }. */
       async start({ auctionId, bidders, rounds }, onEvent) {
-        const r = await fetch(config.bots + "/stress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api: base, auction_id: auctionId, bidders, rounds }) });
-        if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null), r);
-        const { id } = await r.json();
-        const es = new EventSource(`${config.bots}/stress/${id}/events`);
-        es.onmessage = e => { const ev = JSON.parse(e.data); onEvent(ev); if (ev.type === "done" || ev.type === "error") es.close(); };
-        es.onerror = () => { es.close(); onEvent({ type: "error", error: "Lost the connection to the demo bots server" }); };
-        return { stop: () => es.close() };
+        const { data } = await api.post("/v1/demo/stress", { auction_id: auctionId, bidders, rounds }, { auth: true });
+        const ctl = new AbortController();
+        (async () => {
+          try {
+            if (session.refresh && session.expiresIn < 20000) await api.refresh().catch(() => {});
+            const r = await fetch(base + "/v1/demo/stress/" + data.id + "/events", { headers: { Authorization: "Bearer " + session.access }, signal: ctl.signal });
+            if (!r.ok || !r.body) throw new Error("The progress stream answered " + r.status);
+            const reader = r.body.getReader(), dec = new TextDecoder();
+            let buf = "";
+            for (;;) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buf += dec.decode(value, { stream: true });
+              let k;
+              while ((k = buf.indexOf("\n\n")) >= 0) {
+                const line = buf.slice(0, k).replace(/^data: /, ""); buf = buf.slice(k + 2);
+                if (!line.trim()) continue;
+                const ev = JSON.parse(line);
+                onEvent(ev);
+                if (ev.type === "done" || ev.type === "error") { ctl.abort(); return; }
+              }
+            }
+          } catch (e) { if (e.name !== "AbortError") onEvent({ type: "error", error: e.message || "Lost the progress stream" }); }
+        })();
+        return { stop: () => ctl.abort() };
       },
     },
   };
