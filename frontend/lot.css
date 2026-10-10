@@ -142,6 +142,19 @@
 .lt-field input:disabled { opacity: .5; }
 .lt-go:disabled { opacity: .5; }
 
+/* maximum (proxy) bid */
+.lt-proxy { border-top: 1px solid rgba(248, 250, 237, .22); padding-top: 12px; }
+.lt-proxy summary { cursor: pointer; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; min-height: 32px; display: flex; align-items: center; }
+.lt-proxy summary:focus-visible { outline: 2px solid #f8faed; outline-offset: 3px; }
+.lt-proxy #proxyBody { display: grid; gap: 10px; padding-top: 10px; }
+.lt-proxy-state { font-size: 14px; color: rgba(248, 250, 237, .88); }
+.lt-proxy-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.lt-proxy-form .lt-field input { width: 100%; }
+.lt-proxy-err { color: #ffb3ad; font-size: 13px; }
+.lt-proxy .linkish { color: #f8faed; justify-self: start; }
+.lt-hist-auto { margin-left: 6px; font: 500 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+@media (max-width: 640px) { .lt-proxy-form { grid-template-columns: 1fr; } }
+
 .lt-demo { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 2px; }
 .lt-demo .btn-line { color: #f8faed; border-color: rgba(248, 250, 237, .55); }
 .lt-demo .btn-line:hover { background: #f8faed; border-color: #f8faed; color: #000101; }

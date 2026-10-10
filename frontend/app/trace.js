@@ -38,8 +38,36 @@ export function hopsFor(at, be) {
   return { journey, inside, rows: [...journey, ...inside] };
 }
 
+/**
+ * The timeline of one bid as a waterfall: each row is a span with a start offset and a
+ * duration, drawn on one shared time axis. Offsets are reconstructed from what the browser
+ * can see (round trip, Server-Timing, event timestamps); with a Jaeger address configured the
+ * real spans of the trace are fetched and drawn instead.
+ */
+export function waterfallRows(at) {
+  const rows = [];
+  if (at.rtt == null) return rows;
+  const svc = at.timing?.bidding, t = at.timing || {};
+  const net = svc != null ? Math.max(0, at.rtt - svc) / 2 : 0;
+  rows.push({ d: 0, name: "POST /bids", start: 0, dur: at.rtt, fam: "" });
+  if (svc != null) {
+    rows.push({ d: 1, name: "Network and gateway", start: 0, dur: net, fam: "net" });
+    rows.push({ d: 1, name: "Bidding service", start: net, dur: svc, fam: "" });
+    let c = net;
+    for (const k of ["lock", "decide", "write", "commit"]) if (t[k] != null) { rows.push({ d: 2, name: ({ lock: "Row lock", decide: "Rules", write: "Write", commit: "Commit" })[k], start: c, dur: t[k], fam: "" }); c += t[k]; }
+    rows.push({ d: 1, name: "Network back", start: net + svc, dur: net, fam: "net" });
+  }
+  if (at.ws) {
+    const commitAt = svc != null ? net + svc : at.rtt;
+    if (at.ws.outbox != null) rows.push({ d: 0, name: "Outbox to fan-out", start: commitAt, dur: at.ws.outbox, fam: "ev" });
+    rows.push({ d: 0, name: "WebSocket to this screen", start: commitAt + (at.ws.outbox || 0), dur: Math.max(0.1, at.ws.e2e - commitAt - (at.ws.outbox || 0)), fam: "ev" });
+  }
+  return rows;
+}
+
 export class TracePanel {
   constructor(session, be) {
+    this.spans = new Map();
     this.s = session; this.be = be; this.sel = null; this.raf = 0; this.opener = null; this.stress = { state: "idle" };
     this.el = document.createElement("aside");
     this.el.className = "trace"; this.el.id = "trace"; this.el.setAttribute("aria-hidden", "true"); this.el.setAttribute("role", "dialog"); this.el.setAttribute("aria-label", "Behind the bid");
@@ -142,12 +170,46 @@ export class TracePanel {
           ${!at.queued ? `<li class="hop hop-off" title="Asynchronous bids are queued through Kafka, partitioned by auction so each lot keeps its order."><div class="hop-name"><b>Kafka bid queue</b><span>Not used for this bid. It took the direct path.</span></div><div class="hop-val"><b class="tnum">not used</b></div></li>` : ""}
         </ol>
         ${inside.length ? `<h4 class="tr-sub">Inside the transaction</h4><ol class="hops">${inside.map(r => this.#hop(r, imax)).join("")}</ol>` : ""}
+        </section>
+      ${this.#waterfall(at)}
+      <section class="tr-sec" aria-label="Identifiers">
         <dl class="ids">
           ${this.#id("Request ID", at.requestId)}
           ${at.traceId ? this.#id("Trace ID", at.traceId, config.jaeger ? `${config.jaeger}/trace/${at.traceId}` : "") : `<div><dt>Trace ID</dt><dd class="muted">${be.kind === "sim" ? "No tracing in the demo engine" : "Not sent (tracing is off on this API)"}</dd></div>`}
           ${this.#id("Idempotency-Key", at.key)}
         </dl>
         ${at.outcome ? `<p class="tr-outcome tr-${esc(at.outcome.kind)}">${esc(at.outcome.message)}</p>` : ""}
+      </section>`;
+  }
+
+  /** Real spans from Jaeger, when its address is configured; fetched once per trace. */
+  #loadSpans(traceId) {
+    if (!config.jaeger || !traceId || this.spans.has(traceId)) return;
+    this.spans.set(traceId, { state: "loading" });
+    fetch(`${config.jaeger}/api/traces/${traceId}`).then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))).then(j => {
+      const tr = j.data?.[0]; if (!tr) throw new Error("trace not found yet");
+      const spans = tr.spans.map(s => ({ id: s.spanID, parent: s.references?.find(r => r.refType === "CHILD_OF")?.spanID, name: s.operationName, start: s.startTime / 1000, dur: s.duration / 1000 }));
+      const t0 = Math.min(...spans.map(s => s.start)), byId = new Map(spans.map(s => [s.id, s]));
+      const depth = s => { let d = 0, p = s.parent && byId.get(s.parent); while (p && d < 8) { d++; p = p.parent && byId.get(p.parent); } return d; };
+      this.spans.set(traceId, { state: "ok", rows: spans.sort((a, b) => a.start - b.start).map(s => ({ d: Math.min(2, depth(s)), name: s.name.replace(/^db /, "SQL "), start: s.start - t0, dur: s.dur, fam: /^SQL|^db/.test(s.name) ? "" : "" })) });
+      this.#schedule();
+    }).catch(e => { this.spans.set(traceId, { state: "error", error: e.message }); this.#schedule(); });
+  }
+
+  #waterfall(at) {
+    const real = at.traceId ? this.spans.get(at.traceId) : null;
+    if (at.traceId) this.#loadSpans(at.traceId);
+    const rows = real?.state === "ok" ? real.rows : waterfallRows(at);
+    if (!rows.length) return "";
+    const end = Math.max(...rows.map(r => r.start + r.dur), 1);
+    const src = real?.state === "ok" ? "Spans of the real trace, from Jaeger." : this.be.kind === "sim" ? "Reconstructed from simulated timings." : "Reconstructed from the round trip, Server-Timing and event timestamps. Set a Jaeger address to draw the real spans.";
+    return `
+      <section class="tr-sec"><div class="tr-sechead"><h3>Trace waterfall</h3><span class="mono muted">${esc(dur(end))} end to end</span></div>
+        <div class="wf" role="table" aria-label="Spans of this bid on one time axis">${rows.slice(0, 40).map(r => `
+          <div class="wf-row depth-${r.d}" role="row"><span class="wf-name" role="cell">${esc(r.name)}</span>
+            <span class="wf-track" role="cell"><i class="wf-span ${r.fam}" style="left:${(r.start / end * 100).toFixed(2)}%;width:${Math.max(0.6, r.dur / end * 100).toFixed(2)}%"></i></span>
+            <span class="wf-ms" role="cell">${esc(dur(r.dur))}</span></div>`).join("")}</div>
+        <p class="small muted">${esc(src)}${real?.state === "error" ? " Jaeger said: " + esc(real.error) + "." : ""}</p>
       </section>`;
   }
 
