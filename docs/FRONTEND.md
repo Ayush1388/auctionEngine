@@ -11,12 +11,16 @@ cd frontend && python3 -m http.server 5173      # http://localhost:5173
 | Mode | What it needs | What you get |
 |---|---|---|
 | **Real backend** | `make infra && make run` (API on :4000), then `go run ./cmd/demobots seed` | Every number is measured on PostgreSQL, the outbox and the WebSocket. The status pill says "Live backend". |
-| **Plus Stress it** | `RATE_LIMITS=off` on the API, then `go run ./cmd/demobots serve` | The Stress it button fires hundreds of real HTTP bidders at one lot. |
+| **Plus the demo bots** | `DEMO_BOTS_ENABLED=true` on the API (add `DEMO_SEED=true` to load the cars at start-up) | The bots are built into the API. The switch in the badge turns rival bidders on and off, and Stress it fires hundreds of bidders at one lot. No second server, no `RATE_LIMITS=off`. |
 | **No backend** | nothing | The site runs on a built-in **demo engine** that follows the same rules, in the browser. The pill says "Demo engine" and every timing is labelled simulated. |
 
-The page tries the real API first (`http://localhost:4000`, 1.5 s) and falls back to the demo engine. Force a choice with `?engine=sim`, `?engine=live` or `?engine=auto`; set other endpoints with `?api=`, `?bots=` and `?jaeger=`. The choice is remembered.
+The page tries the real API first (`http://localhost:4000`, 1.5 s) and falls back to the demo engine. Force a choice with `?engine=sim`, `?engine=live` or `?engine=auto`; set other endpoints with `?api=` and `?jaeger=`. The choice is remembered.
 
 Demo accounts (real backend after `demobots seed`, and the demo engine): `demo@marque.test`, `collector@marque.test`, `admin@marque.test`, password `marque-demo-password`, each with $2,000,000. Sign in as two different people in two windows to see two bidders on one lot.
+
+## Start here: the backend tour
+
+`tour.html` is the entry point for explaining the system. It lays out eight stages in the order a bid meets them (the request, the decision, the money, the events, search, resilience, observability, other formats). Each stage says what happens, what it is built with and why, lights its parts of the diagram, and opens a live demo page. Every demo page carries the same strip at the top (stage number, one sentence, tech chips, previous and next), so they read as one walkthrough. Stage data lives in `app/tour.js`.
 
 ## What each page shows
 
@@ -34,6 +38,14 @@ Demo accounts (real backend after `demobots seed`, and the demo engine): `demo@m
 | Alerts | WebSocket | "You were outbid", "you won", "closed" |
 | Status | `/livez`, `/readyz`, `/v1/admin/metrics` | Probes for everyone; bids per second, p95 latency, queue depth and breakers for operators |
 | Operator console | `/v1/admin/reconcile`, `/outbox/failed` | "Do the books balance?" and retrying dead-lettered events |
+| **Maximum bid** (lot page) | `PUT/GET/DELETE /v1/auctions/{id}/proxy-bid` | Proxy bidding: set the most you will pay and the engine raises your bid for you, up to it. Bids it places are marked "auto". |
+| **Trust page** | `/v1/admin/reconcile`, bids, wallet | A live "do the books balance" counter, a double-spend attack (many bids, one wallet, checked by the page), a retry with one Idempotency-Key, and the rate-limit bucket |
+| **Chaos lab** | `/v1/admin/chaos` (needs `CHAOS_ENABLED=true`) | Break Redis, Kafka, Elasticsearch, the bidding service or PostgreSQL, keep bidding, and watch breakers open and search fall back |
+| **Architecture map** | probes, metrics, WebSocket | The services a bid touches, with a pulse for every real event, per-node health, and the Kafka lane each lot is pinned to |
+| Race theater | bids, `Server-Timing`, PERFORMANCE.md | Several bids on one price, the lock queue, and pessimistic against optimistic locking on the measured numbers |
+| Search lab | `/search` | The same query through Elasticsearch and the PostgreSQL fallback, side by side |
+| Auction formats | demo only | Dutch and sealed-bid (first and second price) on a small ledger with the engine's money rules |
+| System pulse | `/livez`, `/readyz` | The demo/live badge on every page shows health and round-trip time, and links to the map |
 
 ## How a bid shows up on screen
 
@@ -76,7 +88,7 @@ All additive; existing clients are unaffected.
 | CORS exposes the headers above | A browser can only read exposed headers |
 | `bids.created_at` is `clock_timestamp()` | A bug the Stress it read-back found: see [decision 0006](decisions/0006-bid-concurrency.md) |
 
-`cmd/demobots` is dev tooling in the style of `cmd/loadgen`: `seed` writes the catalogue and demo accounts through the real services, so every seeded bid has a real hold and ledger entry; `serve` runs the stress bots.
+`internal/demobots` is dev tooling built into the API (only when `DEMO_BOTS_ENABLED=true`): `Seed` writes the catalogue and demo accounts through the real services, so every seeded bid has a real hold and ledger entry (`go run ./cmd/demobots seed` does the same from the command line, and `DEMO_SEED=true` at start-up); the ambient rivals and Stress it bid through the same bidder the HTTP handlers use, so holds, the ledger, the outbox, the WebSocket and the chaos faults are all real. They skip the HTTP layer and the rate limiter, which is why no `RATE_LIMITS=off` is needed. Endpoints: `GET/PUT /v1/demo/bots`, `POST /v1/demo/stress`, `GET /v1/demo/stress/{id}/events`, `POST /v1/demo/seed` (operator).
 
 ## How it is organised
 
@@ -110,9 +122,29 @@ Publish the `frontend/` folder to any static host (Netlify, Vercel, GitHub Pages
 
 `docs/media/demo.mp4` is two real windows (Demo bidder and Collector) against the real backend: a simultaneous bid, Behind the bid, then Stress it. To make your own, run the backend and bots as above, then record two browser windows side by side; the sequence is: both click Place bid in the same instant, the loser rebids, open Behind the bid, run Stress it.
 
+## The under-the-hood pages
+
+These move the backend into the main experience instead of hiding it behind admin screens.
+
+**Chaos lab and the real fault switch.** `internal/chaos` is an in-memory switchboard, off unless the API starts with `CHAOS_ENABLED=true`. Operators drive it with `GET/PUT /v1/admin/chaos` and `POST /v1/admin/chaos/reset`. The hooks: a go-redis hook fails every Redis command; the Elasticsearch guard, the Kafka relay and the readiness probes fail on request; a breaker-guarded bidder fails bids with `ErrUnavailable`; a pgx tracer delays every statement. While off, each hook is one atomic load. Never enable it on a production instance.
+
+```bash
+CHAOS_ENABLED=true RATE_LIMITS=off CORS_ALLOWED_ORIGINS=http://localhost:5173 make run
+```
+
+On the hosted demo (no API) the same page drives the demo engine's modelled faults and says so in a banner: breakers open after five failures and half-open after ten seconds, like the Go ones. Timings there are simulated.
+
+**Proxy bidding.** Migration 17 adds `proxy_bids` and `bids.auto`. A manual bid or a new maximum is answered inside the same transaction, under the same auction row lock, by `nextAutoBid` (a pure function, tested without a database; ported to `app/proxy-rules.js` for the demo engine). The higher maximum wins and pays one increment over the lower one; a tie goes to the earlier instruction; only the visible bid is held, and a maximum is capped by the funds available when it is needed. Wallets of every instruction owner are locked together in user-ID order. The proxy endpoints run in the gateway process against the same database, even when bidding itself is a separate gRPC service.
+
+**Kafka lanes.** `app/partition.js` reproduces Kafka's murmur2 partitioner (checked against Kafka's own test vectors), so the page shows the lane each lot really maps to. Lag per partition comes from `auction_kafka_consumer_lag`.
+
+**Trace waterfall.** The Behind the bid panel draws a timeline from the round trip, `Server-Timing` and the event timestamps. With a Jaeger address (`?jaeger=http://localhost:16686`) and a trace ID it fetches and draws the real spans instead (Jaeger must allow the page's origin).
+
 ## Limits worth knowing
 
-- The API has no proxy (maximum) bidding, so the page does not offer it.
+- What the hosted demo shows is simulated, and labelled as such. A free static host cannot run Kafka, Elasticsearch, PostgreSQL and Redis, so the real chaos lab is for your own machine (and a recording).
+- Dutch and sealed-bid auctions are demo-only; the API sells English auctions.
+- Proxy bidding is covered by Go integration tests (`internal/bidding/proxy_test.go`) that need `TEST_DATABASE_URL`; they skip without it.
 - Type-ahead (`/suggest`) is Elasticsearch-only on the API. Without Elasticsearch the page falls back to matching the open lots' titles in the browser.
 - Search without Elasticsearch has no typo tolerance; the page says which backend answered.
 - Activation links in emails point at the API (`/v1/users/activate?token=`). The Activate tab takes the token from that link.
