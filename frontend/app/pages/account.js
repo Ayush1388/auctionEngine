@@ -66,8 +66,8 @@ function signinHTML(s) {
     </form>
     <div class="auth-demo">
       <h2 class="h2">Try it as someone</h2>
-      <p class="small muted">${be.kind === "sim" ? "These accounts live in this browser's demo engine, funded with $2,000,000." : "These accounts exist after you run go run ./cmd/demobots seed, funded with $2,000,000."} Open a second window and sign in as someone else to see two people bid on one lot.</p>
-      <div class="presets">${DEMO_ACCOUNTS.map(a => html`<button type="button" class="preset" data-demo="${a.email}">${a.name}</button>`)}</div>
+      <p class="small muted">${be.kind === "sim" ? "These accounts live in this browser's demo engine, funded with $2,000,000." : "These accounts exist after you run go run ./cmd/demobots seed, funded with $2,000,000."} Open a second window and sign in as someone else to see two people bid on one lot.${be.kind === "sim" ? "" : " The operator account is private: sign in with its own email and password."}</p>
+      <div class="presets">${DEMO_ACCOUNTS.filter(a => be.kind === "sim" || a.role !== "admin").map(a => html`<button type="button" class="preset" data-demo="${a.email}">${a.name}</button>`)}</div>
       <p class="small muted mono">Password for all: ${DEMO_PASSWORD}</p>
     </div>`);
 }

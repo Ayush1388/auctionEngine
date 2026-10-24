@@ -1,17 +1,14 @@
-package main
+package demobots
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Ayush1388/auctionEngine/internal/auction"
 	"github.com/Ayush1388/auctionEngine/internal/bidding"
@@ -19,8 +16,8 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/wallet"
 )
 
-// demoPassword is shared by every demo account (15 characters or more, as the API requires).
-const demoPassword = "marque-demo-password"
+// DemoPassword is shared by every demo account (15 characters or more, as the API requires).
+const DemoPassword = "marque-demo-password"
 
 // unit is cents per dollar: the catalogue is written in dollars, the API in cents.
 const unit = 100
@@ -115,94 +112,113 @@ var demoAccounts = []account{
 	{"admin@marque.test", user.RoleAdmin, 2_000_000 * unit},
 }
 
-func runSeed(args []string) error {
-	fs := flag.NewFlagSet("seed", flag.ExitOnError)
-	path := fs.String("catalog", "frontend/app/catalog.json", "the car catalogue")
-	soon := fs.Duration("soon", 0, "make the Shelby GT500 close in this long, to watch a sale end (e.g. 4m)")
-	_ = fs.Parse(args)
+// SeedOptions tune Seed.
+type SeedOptions struct {
+	// Catalog is the path of frontend/app/catalog.json.
+	Catalog string
+	// Soon makes the Shelby GT500 close in this long, to watch a sale end.
+	Soon time.Duration
+	// AdminEmail and AdminPassword (DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD) give the
+	// operator a private login. When both are set the public demo operator
+	// (admin@marque.test, a known password) is not created, and is demoted if it exists.
+	AdminEmail, AdminPassword string
+}
 
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		return errors.New("DATABASE_URL is required")
+// SeedResult says what Seed did.
+type SeedResult struct {
+	Created  int           `json:"created"`
+	Kept     int           `json:"kept"`
+	Accounts []SeedAccount `json:"accounts"`
+	Password string        `json:"password"`
+}
+
+// SeedAccount is a demo login.
+type SeedAccount struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+	Funds int64  `json:"funds"` // dollars
+}
+
+// Seed writes the car catalogue, the demo accounts and a real bid history.
+// Every seeded bid goes through the bidding service, so wallets, holds and the
+// ledger are exactly what the API would have produced. It is idempotent: a lot
+// that is already open is kept.
+func (b *Bots) Seed(ctx context.Context, opt SeedOptions) (SeedResult, error) {
+	pool := b.o.Pool
+	if opt.Catalog == "" {
+		opt.Catalog = "frontend/app/catalog.json"
 	}
-	raw, err := os.ReadFile(*path)
+	raw, err := os.ReadFile(opt.Catalog)
 	if err != nil {
-		return err
+		return SeedResult{}, err
 	}
 	var cat catalog
 	if err := json.Unmarshal(raw, &cat); err != nil {
-		return fmt.Errorf("%s: %w", *path, err)
+		return SeedResult{}, fmt.Errorf("%s: %w", opt.Catalog, err)
 	}
 
-	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
+	hash, err := user.HashPassword(DemoPassword)
 	if err != nil {
-		return err
+		return SeedResult{}, err
 	}
-	defer pool.Close()
-
-	hash, err := user.HashPassword(demoPassword)
+	house, err := b.ensureUser(ctx, "house@marque.test", user.RoleUser, 0, hash)
 	if err != nil {
-		return err
+		return SeedResult{}, err
 	}
-	wallets := wallet.NewService(pool)
-
-	ensure := func(email, role string, funds int64) (uuid.UUID, error) {
-		var id uuid.UUID
-		err := pool.QueryRow(ctx, `
-			INSERT INTO users (id, email, password_hash, activated_at, role) VALUES ($1, $2, $3, now(), $4)
-			ON CONFLICT (email) DO UPDATE SET activated_at = COALESCE(users.activated_at, now()), role = EXCLUDED.role
-			RETURNING id`, uuid.New(), email, hash, role).Scan(&id)
-		if err != nil {
-			return id, err
+	rivals, err := b.ensureRivals(ctx)
+	if err != nil {
+		return SeedResult{}, err
+	}
+	res := SeedResult{Password: DemoPassword}
+	accounts := demoAccounts
+	if opt.AdminEmail != "" || opt.AdminPassword != "" {
+		if opt.AdminEmail == "" || len(opt.AdminPassword) < 15 {
+			return res, fmt.Errorf("DEMO_ADMIN_EMAIL is required and DEMO_ADMIN_PASSWORD must be at least 15 characters")
 		}
-		for i := int64(0); funds > 0; i++ { // one deposit is capped at wallet.MaxDeposit
-			part := min(funds, wallet.MaxDeposit)
-			if _, err := wallets.Deposit(ctx, id, part, fmt.Sprintf("demo-seed-%s-%d", id, i)); err != nil {
-				return id, fmt.Errorf("fund %s: %w", email, err)
+		accounts = nil
+		for _, a := range demoAccounts {
+			if a.role != user.RoleAdmin {
+				accounts = append(accounts, a)
 			}
-			funds -= part
 		}
-		return id, nil
-	}
-
-	house, err := ensure("house@marque.test", user.RoleUser, 0)
-	if err != nil {
-		return err
-	}
-	var rivals []uuid.UUID
-	for _, n := range []int{184, 291, 407, 52, 318, 96} {
-		id, err := ensure(fmt.Sprintf("bidder-%d@bots.marque.test", n), user.RoleUser, 60_000_000*unit)
+		adminHash, err := user.HashPassword(opt.AdminPassword)
 		if err != nil {
-			return err
+			return res, err
 		}
-		rivals = append(rivals, id)
+		if _, err := b.ensureUser(ctx, opt.AdminEmail, user.RoleAdmin, 2_000_000*unit, adminHash); err != nil {
+			return res, err
+		}
+		// the public demo operator must not stay an operator on a public instance
+		if _, err := pool.Exec(ctx, `UPDATE users SET role = 'user' WHERE email = 'admin@marque.test' AND role = 'admin'`); err != nil {
+			return res, err
+		}
+		res.Accounts = append(res.Accounts, SeedAccount{opt.AdminEmail, user.RoleAdmin, 2_000_000})
 	}
-	for _, a := range demoAccounts {
-		if _, err := ensure(a.email, a.role, a.funds); err != nil {
-			return err
+	for _, a := range accounts {
+		if _, err := b.ensureUser(ctx, a.email, a.role, a.funds, hash); err != nil {
+			return res, err
 		}
+		res.Accounts = append(res.Accounts, SeedAccount{a.email, a.role, a.funds / unit})
 	}
 
-	svc := auction.NewService(pool, auction.NewRepository(pool))
+	svc := b.o.Auctions
 	bids := bidding.NewService(pool, bidding.Pessimistic)
-	created, kept := 0, 0
 	for _, l := range cat.Lots {
 		var exists bool
 		if err := pool.QueryRow(ctx, `
 			SELECT EXISTS (SELECT 1 FROM auctions a JOIN items i ON i.id = a.item_id
 			WHERE a.status IN ('ACTIVE', 'NOT_ACTIVE') AND a.owner_id = $1 AND i.description LIKE $2)`,
 			house, `%"key":"`+l.Key+`"%`).Scan(&exists); err != nil {
-			return err
+			return res, err
 		}
 		if exists {
-			kept++
+			res.Kept++
 			continue
 		}
 
 		ends := time.Duration(l.EndsIn) * time.Second
-		if *soon > 0 && l.Key == "gt500" {
-			ends = *soon
+		if opt.Soon > 0 && l.Key == "gt500" {
+			ends = opt.Soon
 		}
 		now := time.Now().UTC()
 		a, err := svc.Create(ctx, house, auction.CreateInput{
@@ -212,18 +228,17 @@ func runSeed(args []string) error {
 			StartsAt:      now.Add(time.Minute), EndsAt: now.Add(24 * time.Hour),
 		})
 		if err != nil {
-			return fmt.Errorf("create %s: %w", l.Key, err)
+			return res, fmt.Errorf("create %s: %w", l.Key, err)
 		}
 		// Open it now (the API only schedules into the future) and set its real close.
 		if _, err := pool.Exec(ctx, `UPDATE auctions SET status = 'ACTIVE', starts_at = now() - interval '6 hours',
 			ends_at = now() + $2 * interval '1 second' WHERE id = $1`, a.ID, ends.Seconds()); err != nil {
-			return err
+			return res, err
 		}
-		// A real history: each bid goes through the real bidding service, so holds and the ledger are right.
 		for k := 0; k < l.Bids; k++ {
 			amount := (l.Bid-int64(l.Bids)*l.Step)*unit + int64(k+1)*l.Step*unit
 			if _, err := bids.PlaceBid(ctx, bidding.PlaceBidInput{AuctionID: a.ID, UserID: rivals[k%len(rivals)], Amount: amount}); err != nil {
-				return fmt.Errorf("bid %d on %s: %w", k+1, l.Key, err)
+				return res, fmt.Errorf("bid %d on %s: %w", k+1, l.Key, err)
 			}
 		}
 		// Spread the bids over the last five hours so the history reads like one.
@@ -231,17 +246,53 @@ func runSeed(args []string) error {
 			WITH r AS (SELECT id, row_number() OVER (ORDER BY amount) AS n FROM bids WHERE auction_id = $1)
 			UPDATE bids b SET created_at = now() - interval '5 hours' + (r.n::float8 / $2) * interval '4.9 hours' FROM r WHERE b.id = r.id`,
 			a.ID, float64(l.Bids)); err != nil {
-			return err
+			return res, err
 		}
-		created++
+		res.Created++
 	}
+	return res, nil
+}
 
-	fmt.Printf("catalogue: %d lots created, %d already open\n\n", created, kept)
-	fmt.Println("demo accounts (password: " + demoPassword + ")")
-	for _, a := range demoAccounts {
-		role := a.role
-		fmt.Printf("  %-26s %-6s $%s\n", a.email, role, fmt.Sprint(a.funds/unit))
+// ensureUser creates (or reactivates) a demo user and tops the wallet up to funds.
+func (b *Bots) ensureUser(ctx context.Context, email, role string, funds int64, hash string) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := b.o.Pool.QueryRow(ctx, `
+		INSERT INTO users (id, email, password_hash, activated_at, role) VALUES ($1, $2, $3, now(), $4)
+		ON CONFLICT (email) DO UPDATE SET activated_at = COALESCE(users.activated_at, now()), role = EXCLUDED.role, password_hash = EXCLUDED.password_hash
+		RETURNING id`, uuid.New(), email, hash, role).Scan(&id)
+	if err != nil {
+		return id, err
 	}
-	fmt.Println("\nnext: go run ./cmd/demobots serve   (the Stress it button)")
-	return nil
+	for i := int64(0); funds > 0; i++ { // one deposit is capped at wallet.MaxDeposit
+		part := min(funds, wallet.MaxDeposit)
+		if _, err := b.o.Wallets.Deposit(ctx, id, part, fmt.Sprintf("demo-seed-%s-%d", id, i)); err != nil {
+			return id, fmt.Errorf("fund %s: %w", email, err)
+		}
+		funds -= part
+	}
+	return id, nil
+}
+
+// ensureRivals makes the six named rival bidders that bid in the seeded history
+// and, when the ambient bots are on, keep a quiet site alive.
+func (b *Bots) ensureRivals(ctx context.Context) ([]uuid.UUID, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.rivals) > 0 {
+		return b.rivals, nil
+	}
+	hash, err := user.HashPassword(uuid.NewString())
+	if err != nil {
+		return nil, err
+	}
+	var ids []uuid.UUID
+	for _, n := range []int{184, 291, 407, 52, 318, 96} {
+		id, err := b.ensureUser(ctx, fmt.Sprintf("bidder-%d@bots.marque.test", n), user.RoleUser, 60_000_000*unit, hash)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	b.rivals = ids
+	return ids, nil
 }

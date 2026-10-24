@@ -168,6 +168,11 @@ func (s *Service) placePessimistic(ctx context.Context, in PlaceBidInput) (Resul
 		}
 		tm.Lock = time.Since(t0)
 
+		// maximum bids: take every wallet this bid can touch now, in order
+		if err := lockParticipants(ctx, tx, a, in.UserID); err != nil {
+			return err
+		}
+
 		// 2. Idempotency check *after* the lock: a concurrent duplicate of
 		//    this request that got the lock first has committed by now,
 		//    so we see its bid and replay it instead of bidding twice.
@@ -190,6 +195,9 @@ func (s *Service) placePessimistic(ctx context.Context, in PlaceBidInput) (Resul
 		// 4. Write everything.
 		t2 := time.Now()
 		res, err = apply(ctx, tx, a, in, p, s.now(), false)
+		if err == nil {
+			err = s.answerWithProxies(ctx, tx, &res, in.UserID)
+		}
 		tm.Write = time.Since(t2)
 		fnEnd = time.Now()
 		return err
@@ -214,6 +222,19 @@ func (s *Service) placeOptimistic(ctx context.Context, in PlaceBidInput) (Result
 			if err != nil {
 				return err
 			}
+			// An auction with maximum bids resolves several wallets in one step. To
+			// lock them in a fixed order (auction row, then wallets by user ID) take
+			// the row lock up front, as the pessimistic strategy does.
+			if has, err := hasProxies(ctx, tx, in.AuctionID); err != nil {
+				return err
+			} else if has {
+				if a, err = getAuction(ctx, tx, in.AuctionID, true); err != nil {
+					return err
+				}
+				if err := lockParticipants(ctx, tx, a, in.UserID); err != nil {
+					return err
+				}
+			}
 
 			if in.IdempotencyKey != "" {
 				replayed, found, err := s.findReplay(ctx, tx, in, a)
@@ -229,6 +250,9 @@ func (s *Service) placeOptimistic(ctx context.Context, in PlaceBidInput) (Result
 			}
 
 			res, err = apply(ctx, tx, a, in, p, s.now(), true)
+			if err == nil {
+				err = s.answerWithProxies(ctx, tx, &res, in.UserID)
+			}
 			return err
 		})
 
@@ -327,10 +351,10 @@ func apply(
 	// order bids were accepted.
 	var createdAt time.Time
 	err = tx.QueryRow(ctx, `
-		INSERT INTO bids (id, auction_id, user_id, amount, idempotency_key, created_at)
-		VALUES ($1, $2, $3, $4, $5, clock_timestamp())
+		INSERT INTO bids (id, auction_id, user_id, amount, idempotency_key, created_at, auto)
+		VALUES ($1, $2, $3, $4, $5, clock_timestamp(), $6)
 		RETURNING created_at
-	`, bidID, a.ID, in.UserID, in.Amount, key).Scan(&createdAt)
+	`, bidID, a.ID, in.UserID, in.Amount, key, in.auto).Scan(&createdAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "bids_idempotency_idx" {
@@ -407,6 +431,7 @@ func apply(
 		EndsAt:    endsAt,
 		Extended:  p.Extended,
 		PlacedAt:  createdAt,
+		Auto:      in.auto,
 	}
 	if p.Release != nil {
 		event.PreviousBidderID = &p.Release.UserID
@@ -422,6 +447,7 @@ func apply(
 			UserID:    in.UserID,
 			Amount:    in.Amount,
 			CreatedAt: createdAt,
+			Auto:      in.auto,
 		},
 		EndsAt:     endsAt,
 		Extended:   p.Extended,

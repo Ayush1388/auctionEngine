@@ -145,6 +145,7 @@ type PlacedBid struct {
 	PreviousBidderID *uuid.UUID `json:"previous_bidder_id"`
 	Amount           int64      `json:"amount"`
 	Extended         bool       `json:"extended"`
+	Auto             bool       `json:"auto,omitempty"`
 }
 
 // Timing lets a client work out how long the event spent between the commit
@@ -189,6 +190,7 @@ func EventHandler(load func(context.Context, uuid.UUID) (auction.Auction, error)
 					PreviousBidderID: placed.PreviousBidderID,
 					Amount:           placed.Amount,
 					Extended:         placed.Extended,
+					Auto:             placed.Auto,
 				}
 				u.Timing = &Timing{PlacedAt: placed.PlacedAt.UTC(), SentAt: time.Now().UTC()}
 			}

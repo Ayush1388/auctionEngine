@@ -3,6 +3,7 @@
 import { initShell, toast, follow } from "./app/shell.js";
 import { LotSession, bidderLabel } from "./app/bidding.js";
 import { TracePanel } from "./app/trace.js";
+import { mountProxy } from "./app/proxy-ui.js";
 import { resolveId, catalogOrder } from "./app/lots.js";
 import { SNIPE_WINDOW } from "./app/rules.js";
 import { html, raw, esc, $, usd, parseUsd, clock, ago, dateTime, local, reduceMotion } from "./app/util.js";
@@ -195,7 +196,7 @@ let newBidId = null;
 function paintHistory() {
   const rows = s.history.slice(0, 6), n = s.lot.bids;
   $("#histEmpty").hidden = rows.length > 0;
-  $("#hist").innerHTML = String(html`${rows.map((b, i) => html`<tr class="${b.user_id === me() ? "you" : ""}${b.id === newBidId ? " new" : ""}"><td>${n - i}</td><td>${bidderLabel(b.user_id, me())}</td><td>${money(b.amount)}</td><td>${ago(b.created_at, be.feed.serverNow())}</td></tr>`)}`);
+  $("#hist").innerHTML = String(html`${rows.map((b, i) => html`<tr class="${b.user_id === me() ? "you" : ""}${b.id === newBidId ? " new" : ""}"><td>${n - i}</td><td>${bidderLabel(b.user_id, me())}${b.auto ? html`<span class="lt-hist-auto" title="Placed by the engine for a maximum bid">auto</span>` : ""}</td><td>${money(b.amount)}</td><td>${ago(b.created_at, be.feed.serverNow())}</td></tr>`)}`);
   if (newBidId && window.gsap && !reduceMotion()) { const r = $("#hist").firstElementChild; if (r) gsap.from(r, { autoAlpha: 0, y: -10, duration: .45, ease: "power2.out" }); }
   newBidId = null;
 }
@@ -275,6 +276,8 @@ async function showReceipt() {
 $("#traceBtn").addEventListener("click", e => trace.toggle(e.currentTarget));
 $("#stressBtn").addEventListener("click", e => { trace.open(e.currentTarget); setTimeout(() => $("#stress")?.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" }), 60); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) s.reload(); });
+
+mountProxy({ be, session: s, root: $("#proxy"), toast, onChange: () => { schedule(); } });
 
 if (s.me) follow(id);
 paintLot(); paintHistory(); tick();

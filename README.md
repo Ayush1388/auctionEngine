@@ -25,9 +25,9 @@ make e2e                             # drive it end to end from outside
 *Forty seconds, real backend, two windows: two people bid in the same instant and exactly one wins; the loser is told the new minimum and how long it waited behind the winner; **Behind the bid** shows every hop of a bid with measured timings; **Stress it** fires 200 bidders at one lot and checks the result from outside.* ([watch the video](docs/media/demo.mp4))
 
 ```bash
-make infra && cp .env.example .env && make migrate && make run     # the API on :4000 (set RATE_LIMITS=off in .env for Stress it)
-go run ./cmd/demobots seed && go run ./cmd/demobots serve          # the catalogue, and the Stress it bots
-cd frontend && python3 -m http.server 5173                         # http://localhost:5173
+make infra && cp .env.example .env && make migrate
+DEMO_BOTS_ENABLED=true DEMO_SEED=true CHAOS_ENABLED=true make run  # the API on :4000, with the demo cars, the bots and the chaos lab built in
+cd frontend && python3 -m http.server 5173                         # http://localhost:5173 (the bots switch is in the badge, bottom left)
 ```
 
 No backend? The frontend runs alone on a built-in demo engine with the same rules, so a hosted copy works for anyone: publish the `frontend/` folder to any static host. Details: [`docs/FRONTEND.md`](docs/FRONTEND.md).

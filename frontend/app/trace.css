@@ -83,3 +83,12 @@
   .evlog li code, .evlog li span:nth-of-type(3) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .hop-bar i { animation: none; } .trace { transition: none; } }
+
+/* Docked on the left (over the photos), so the bid box and the live price stay in view
+   while a bid is explained. Below 1100px the page is one column: a bottom sheet instead. */
+@media (min-width: 1100px) {
+  .trace { right: auto; left: 0; width: min(540px, 42vw); border-left: 0; border-right: 1px solid var(--line); box-shadow: 30px 0 60px -40px var(--shadow); transform: translateX(-100%); }
+}
+@media (max-width: 1099px) {
+  .trace { top: auto; bottom: 0; right: 0; left: 0; width: 100%; height: 72vh; border-left: 0; border-top: 1px solid var(--line); border-radius: var(--r-surface) var(--r-surface) 0 0; transform: translateY(100%); }
+}

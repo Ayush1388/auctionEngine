@@ -59,6 +59,8 @@ WORKDIR /app
 
 COPY --from=build /out/ /app/
 COPY migrations /app/migrations
+# the demo catalogue (DEMO_SEED=true), the same file the frontend reads
+COPY frontend/app/catalog.json /app/catalog.json
 
 # Never run as root: if the process is compromised, the attacker is an
 # unprivileged user inside the container.

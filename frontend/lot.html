@@ -7,7 +7,7 @@
   <script>try{if(localStorage.getItem("marque-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Koulen&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="lot.css"><link rel="stylesheet" href="app/trace.css">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="app/app.css"><link rel="stylesheet" href="lot.css"><link rel="stylesheet" href="app/trace.css"><link rel="stylesheet" href="app/lab.css">
 </head>
 <body>
 <header id="appbar"></header>
@@ -56,6 +56,8 @@
         </form>
         <p class="lt-min" id="minLine"></p>
         <div class="lt-result" id="result" role="status" aria-live="polite"></div>
+
+        <details class="lt-proxy" id="proxy"><summary>Set a maximum bid</summary><div id="proxyBody"></div></details>
 
         <div class="lt-demo">
           <button class="btn btn-line btn-sm" id="traceBtn" aria-controls="trace">Behind the bid</button>
