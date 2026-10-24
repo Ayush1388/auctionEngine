@@ -142,3 +142,60 @@ test("search tolerates a typo and suggest matches word starts", () => {
   assert.equal(w.suggest("jag")[0].title, "1964 Jaguar E-Type");
   assert.equal(w.search("porsche").auctions.length, 0);
 });
+
+/* ---------- maximum (proxy) bidding: mirrors internal/bidding/proxy_test.go ---------- */
+test("a maximum answers a manual bid at once, holds only the visible bid, and the higher maximum wins", () => {
+  const { w, a, b, mk } = setup(); const au = mk();
+  let st = w.setProxy(a.id, au.id, 5000);
+  assert.equal(st.leading, true); assert.equal(st.current_bid, 1000);
+  const r = w.placeBid(b.id, au.id, 2000);
+  assert.equal(r.body.countered, true); assert.equal(r.body.current_bid, 2100);
+  assert.deepEqual(w.wallet(a.id), { available: 97_900, reserved: 2100, total: 100_000 });
+  assert.equal(w.wallet(b.id).reserved, 0);
+  st = w.setProxy(b.id, au.id, 9000);                 // higher maximum: wins one increment over 5000
+  assert.equal(st.leading, true); assert.equal(st.current_bid, 5100);
+  assert.deepEqual(w.wallet(a.id), { available: 100_000, reserved: 0, total: 100_000 });
+  assert.ok(w.getAuction(au.id).bid_count >= 3);
+  assert.equal(w.reconcile().ok, true);
+  assert.ok(w.bidsOf(au.id).bids.some(x => x.auto));
+});
+
+test("a maximum is capped by the funds, never beyond them", () => {
+  const { w, a, b, mk } = setup(); const au = mk();
+  w.addUser({ email: "poor@x.test", funds: 1300 });
+  const poor = [...w.users.values()].find(u => u.email === "poor@x.test");
+  w.setProxy(poor.id, au.id, 50_000);                 // wants far more than they have
+  w.placeBid(a.id, au.id, 1100);                      // a pushes; the engine can only go to 1300
+  w.placeBid(b.id, au.id, 1400);
+  assert.equal(w.wallet(poor.id).available + w.wallet(poor.id).reserved, 1300);
+  assert.ok(w.wallet(poor.id).available >= 0);
+  assert.equal(w.reconcile().ok, true);
+});
+
+test("maximum bid rules: below the minimum, own auction, ended, and removal", () => {
+  const { w, a, seller, advance, mk } = setup(); const au = mk();
+  rejects(() => w.setProxy(a.id, au.id, 500), 422, /at least 1000/);
+  rejects(() => w.setProxy(seller.id, au.id, 5000), 403, /own auction/);
+  w.setProxy(a.id, au.id, 3000);
+  assert.equal(w.proxyOf(a.id, au.id).max_amount, 3000);
+  w.cancelProxy(a.id, au.id);
+  rejects(() => w.proxyOf(a.id, au.id), 404);
+  advance(2 * HOUR);
+  rejects(() => w.setProxy(a.id, au.id, 5000), 409, /ended/);
+});
+
+test("many maximums settle to the same result whatever order they arrive in", () => {
+  const maxes = [2000, 3000, 4000, 4500, 3500];
+  const results = new Set();
+  for (let run = 0; run < 12; run++) {
+    const { w, seller, mk } = setup(); const au = mk();
+    const users = maxes.map((_, i) => w.addUser({ email: `u${i}@x.test`, funds: 100_000 }));
+    const order = users.map((u, i) => [Math.sin(run * 7 + i), i]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
+    for (const i of order) { try { w.setProxy(users[i].id, au.id, maxes[i]); } catch { /* none expected */ } }
+    const g = w.getAuction(au.id);
+    results.add(`${users.findIndex(u => u.id === g.current_bidder_id)}:${g.current_bid}`);
+    assert.equal(w.reconcile().ok, true);
+    assert.ok(seller);
+  }
+  assert.deepEqual([...results], ["3:4100"]);        // 4500 wins, one increment over 4000
+});

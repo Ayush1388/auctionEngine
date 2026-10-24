@@ -76,7 +76,7 @@ export class LotSession extends Emitter {
     const extended = Date.parse(s.ends_at) > Date.parse(prev.endsAt) && s.extensions > prev.extensions;
 
     if (ev.bid) {
-      this.history = [{ id: ev.bid.id, auction_id: s.id, user_id: ev.bid.bidder_id, amount: ev.bid.amount, created_at: ev.timing?.placed_at || new Date().toISOString() }, ...this.history.filter(b => b.id !== ev.bid.id)].slice(0, 50);
+      this.history = [{ id: ev.bid.id, auction_id: s.id, user_id: ev.bid.bidder_id, amount: ev.bid.amount, created_at: ev.timing?.placed_at || new Date().toISOString(), ...(ev.bid.auto ? { auto: true } : {}) }, ...this.history.filter(b => b.id !== ev.bid.id)].slice(0, 50);
       if (ev.bid.bidder_id !== this.me) this.lastOther = performance.now();
       if (ev.bid.previous_bidder_id === this.me && ev.bid.bidder_id !== this.me) {
         this.loadWallet();
@@ -131,7 +131,7 @@ export class LotSession extends Emitter {
     at.outcome = outcome;
     this.emit("attempt", at);
     this.emit("outcome", outcome);
-    if (r.ok) { if (!r.replayed) { this.#applyOwnBid(r.data); } this.loadWallet(); }
+    if (r.ok) { if (!r.replayed) { r.data?.countered ? this.reload() : this.#applyOwnBid(r.data); } this.loadWallet(); }
     else if (outcome.kind === "collision" || outcome.kind === "toolow") this.reload();
     return { attempt: at, outcome };
   }
@@ -148,6 +148,7 @@ export class LotSession extends Emitter {
     const me = this.me;
     if (r.ok && r.queued) return { kind: "queued", message: "Queued. The bid goes through Kafka and is applied in order; this page updates when it lands." };
     if (r.ok && r.replayed) return { kind: "duplicate", message: "That click was already placed. The Idempotency-Key matched, so the server returned the first bid and did not bid again.", amount: at.amount };
+    if (r.ok && r.data?.countered) return { kind: "countered", message: `Your bid of ${usd(at.amount)} was placed, then a maximum bid answered at once and the price is now ${usd(r.data.current_bid)}. You are not leading. Your hold was released.`, amount: at.amount, minimum: r.data.current_bid + this.lot.step };
     if (r.ok) return { kind: "leading", message: `You lead at ${usd(at.amount)}. That amount is held from your balance until you are outbid or the sale closes.`, amount: at.amount, extended: !!r.data?.extended };
     const e = r.error, body = e?.body || {};
     const lock = r.serverTiming?.lock;

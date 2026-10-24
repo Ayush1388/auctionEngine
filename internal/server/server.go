@@ -11,6 +11,7 @@ import (
 
 	"github.com/Ayush1388/auctionEngine/api"
 	"github.com/Ayush1388/auctionEngine/internal/auth"
+	"github.com/Ayush1388/auctionEngine/internal/demobots"
 	"github.com/Ayush1388/auctionEngine/internal/handlers"
 	"github.com/Ayush1388/auctionEngine/internal/health"
 	"github.com/Ayush1388/auctionEngine/internal/httpx"
@@ -33,6 +34,9 @@ type Deps struct {
 	Bids     *handlers.BidHandler
 	Wallets  *handlers.WalletHandler
 	Admin    *handlers.AdminHandler
+	Proxy    *handlers.ProxyHandler // maximum (proxy) bids
+	Demo     *demobots.Handler      // demo bots; nil means the routes answer 404
+	Chaos    *handlers.ChaosHandler // fault switchboard; nil means the routes answer 404
 	Search   *handlers.SearchHandler
 
 	// Realtime serves WebSocket upgrades (v0.7). nil in tests that don't
@@ -135,6 +139,11 @@ func routes(d Deps) []Route {
 		{"GET", "/v1/auctions/{id}/bids", http.HandlerFunc(d.Bids.History)},
 		{"GET", "/v1/bid-requests/{id}", protected(d.Bids.Request)},
 
+		// Maximum (proxy) bidding: the engine raises the caller's bid for them.
+		{"PUT", "/v1/auctions/{id}/proxy-bid", d.Auth.Authenticate(limited(d.Limits.Bids, byUser, http.HandlerFunc(proxyOr(d.Proxy).Set)))},
+		{"GET", "/v1/auctions/{id}/proxy-bid", protected(proxyOr(d.Proxy).Get)},
+		{"DELETE", "/v1/auctions/{id}/proxy-bid", protected(proxyOr(d.Proxy).Delete)},
+
 		// Wallet
 		{"GET", "/v1/wallet", protected(d.Wallets.Get)},
 		{"POST", "/v1/wallet/deposits", protected(d.Wallets.Deposit)},
@@ -145,7 +154,43 @@ func routes(d Deps) []Route {
 		{"GET", "/v1/admin/metrics", admin(d.Admin.Metrics)},
 		{"GET", "/v1/admin/outbox/failed", admin(d.Admin.FailedEvents)},
 		{"POST", "/v1/admin/outbox/{id}/retry", admin(d.Admin.RetryEvent)},
+		// Demo bots (built into the API when DEMO_BOTS_ENABLED=true)
+		{"GET", "/v1/demo/bots", http.HandlerFunc(demoOr(d.Demo).State)},
+		{"PUT", "/v1/demo/bots", protected(demoOr(d.Demo).Set)},
+		{"POST", "/v1/demo/stress", protected(demoOr(d.Demo).StartStress)},
+		{"GET", "/v1/demo/stress/{id}/events", protected(demoOr(d.Demo).StressEvents)},
+		{"POST", "/v1/demo/seed", admin(demoOr(d.Demo).Seed)},
+		{"GET", "/v1/admin/chaos", admin(chaosOr(d.Chaos).Get)},
+		{"PUT", "/v1/admin/chaos", admin(chaosOr(d.Chaos).Set)},
+		{"POST", "/v1/admin/chaos/reset", admin(chaosOr(d.Chaos).Reset)},
 	}
+}
+
+// demoOr returns h, or a disabled handler (every route answers 404).
+func demoOr(h *demobots.Handler) *demobots.Handler {
+	if h != nil {
+		return h
+	}
+	return demobots.NewHandler(nil, "")
+}
+
+// proxyOr returns h, or a handler whose service is missing (tests that do not
+// exercise proxy bidding); such a request answers 500 rather than panicking at
+// route-table build time.
+func proxyOr(h *handlers.ProxyHandler) *handlers.ProxyHandler {
+	if h != nil {
+		return h
+	}
+	return handlers.NewProxyHandler(nil)
+}
+
+// chaosOr returns h, or a handler set whose routes answer 404 when the
+// switchboard is not wired (tests, minimal builds).
+func chaosOr(h *handlers.ChaosHandler) *handlers.ChaosHandler {
+	if h != nil {
+		return h
+	}
+	return handlers.NewChaosHandler()
 }
 
 // realtimeOr returns h, or a 503 handler when WebSockets aren't wired.

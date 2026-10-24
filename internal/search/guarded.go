@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Ayush1388/auctionEngine/internal/breaker"
+	"github.com/Ayush1388/auctionEngine/internal/chaos"
 )
 
 // Guarded puts a circuit breaker in front of Elasticsearch (v1.0).
@@ -39,6 +40,9 @@ func (g *Guarded) Name() string { return g.es.Name() }
 
 func (g *Guarded) Search(ctx context.Context, q Query) (page Page, err error) {
 	err = g.b.Do(ctx, func(ctx context.Context) error {
+		if err = chaos.Fail(chaos.Elasticsearch); err != nil {
+			return err
+		}
 		page, err = g.es.Search(ctx, q)
 		return err
 	})
@@ -47,6 +51,9 @@ func (g *Guarded) Search(ctx context.Context, q Query) (page Page, err error) {
 
 func (g *Guarded) Suggest(ctx context.Context, prefix string, limit int) (out []Suggestion, err error) {
 	err = g.b.Do(ctx, func(ctx context.Context) error {
+		if err = chaos.Fail(chaos.Elasticsearch); err != nil {
+			return err
+		}
 		out, err = g.es.Suggest(ctx, prefix, limit)
 		return err
 	})
@@ -54,9 +61,19 @@ func (g *Guarded) Suggest(ctx context.Context, prefix string, limit int) (out []
 }
 
 func (g *Guarded) Upsert(ctx context.Context, doc Document) error {
-	return g.b.Do(ctx, func(ctx context.Context) error { return g.es.Upsert(ctx, doc) })
+	return g.b.Do(ctx, func(ctx context.Context) error {
+		if err := chaos.Fail(chaos.Elasticsearch); err != nil {
+			return err
+		}
+		return g.es.Upsert(ctx, doc)
+	})
 }
 
 func (g *Guarded) Delete(ctx context.Context, id uuid.UUID) error {
-	return g.b.Do(ctx, func(ctx context.Context) error { return g.es.Delete(ctx, id) })
+	return g.b.Do(ctx, func(ctx context.Context) error {
+		if err := chaos.Fail(chaos.Elasticsearch); err != nil {
+			return err
+		}
+		return g.es.Delete(ctx, id)
+	})
 }

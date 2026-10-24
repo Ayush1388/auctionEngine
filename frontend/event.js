@@ -168,3 +168,4 @@ const modeBtn = $("modeToggle");
 const setTheme = dark => { if (dark) document.documentElement.setAttribute("data-theme", "dark"); else document.documentElement.removeAttribute("data-theme"); modeBtn.setAttribute("aria-checked", dark); try { localStorage.setItem("marque-theme", dark ? "dark" : "light"); } catch (e) {} };
 modeBtn.setAttribute("aria-checked", document.documentElement.getAttribute("data-theme") === "dark");
 modeBtn.addEventListener("click", () => setTheme(modeBtn.getAttribute("aria-checked") !== "true"));
+modeBtn.dataset.wired = "1";   // the shared shell must not add a second handler: two toggles cancel each other

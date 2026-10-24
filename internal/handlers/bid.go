@@ -60,6 +60,7 @@ type bidResponse struct {
 	UserID    string    `json:"user_id"`
 	Amount    int64     `json:"amount"`
 	CreatedAt time.Time `json:"created_at"`
+	Auto      bool      `json:"auto,omitempty"`
 }
 
 type placeBidResponse struct {
@@ -69,6 +70,9 @@ type placeBidResponse struct {
 	EndsAt     time.Time   `json:"ends_at"`
 	Extended   bool        `json:"extended"`
 	Replayed   bool        `json:"replayed"`
+	// Countered: a maximum bid (proxy) answered this bid at once, so the
+	// bidder is not leading. current_bid is then the price after the answer.
+	Countered bool `json:"countered,omitempty"`
 }
 
 func toBidResponse(b bidding.Bid) bidResponse {
@@ -78,6 +82,7 @@ func toBidResponse(b bidding.Bid) bidResponse {
 		UserID:    b.UserID.String(),
 		Amount:    b.Amount,
 		CreatedAt: b.CreatedAt.UTC(),
+		Auto:      b.Auto,
 	}
 }
 
@@ -146,6 +151,7 @@ func (h *BidHandler) Place(w http.ResponseWriter, r *http.Request) {
 			EndsAt:     res.EndsAt.UTC(),
 			Extended:   res.Extended,
 			Replayed:   res.Replayed,
+			Countered:  res.Countered,
 		})
 	case errors.As(err, &tooLow):
 		httpx.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
