@@ -52,6 +52,9 @@ type Options struct {
 	Auctions *auction.Service
 	Wallets  *wallet.Service
 	Logger   *slog.Logger
+
+	// Seed holds the options the keeper and the operator's "refresh" button use.
+	Seed SeedOptions
 }
 
 // Bots is the demo bot controller. The zero value is not usable; call New.

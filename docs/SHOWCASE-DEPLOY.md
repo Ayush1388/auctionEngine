@@ -88,6 +88,21 @@ docker compose -f deploy/compose.yml -f deploy/showcase.yml up -d api-1
 
 Open the Vercel URL: the pill at the bottom left should say **Live backend** with a green dot.
 
+## Keeping the demo stocked (also on Render)
+
+Seeded lots close on a timer, and a closed auction stays closed. With `DEMO_SEED=true` the API therefore seeds at start-up and again every `DEMO_REFRESH_EVERY` (default 10 minutes): any catalogue car that no longer has an open lot gets a fresh one (the closed auction and its bids stay). `DEMO_LOT_HOURS` makes new lots last at least that long, on top of their catalogue length (use `72` for a public demo; the catalogue alone is 20 minutes to 12 hours).
+
+Hosting the API on Render, or anywhere else, needs only environment variables, no SQL:
+
+```
+DEMO_BOTS_ENABLED=true
+DEMO_SEED=true
+DEMO_LOT_HOURS=72
+CORS_ALLOWED_ORIGINS=https://<your-frontend>.vercel.app
+```
+
+Deploy, and the closed lots are replaced within a minute. An operator can also press "Refresh demo cars" in the badge (or `POST /v1/demo/seed`) to do it on demand.
+
 ## What to know
 
 - **Sign in as the operator** with your private login to use the chaos lab, the books-balance audit and the metrics. Everyone else can bid with their own accounts (register needs email activation, which goes to Mailpit unless you configure SMTP; the seeded `demo@marque.test` and `collector@marque.test` work with `marque-demo-password`).
