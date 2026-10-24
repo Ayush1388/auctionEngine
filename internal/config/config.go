@@ -65,6 +65,10 @@ type Config struct {
 	// rival bidders and Stress it, switched on and off from the website.
 	// DemoSeed loads the car catalogue at start-up when no lot is open.
 	// DemoCatalog is the path of frontend/app/catalog.json.
+	// RequireActivation brings back the email-token step at sign-up (REQUIRE_ACTIVATION=true).
+	// Off by default: an account is an email and a password.
+	RequireActivation bool
+
 	DemoBotsEnabled bool
 	DemoSeed        bool
 	DemoCatalog     string
@@ -309,6 +313,7 @@ func Load() (Config, error) {
 		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
 		RateLimitsEnabled:  rateLimits,
 		ChaosEnabled:       os.Getenv("CHAOS_ENABLED") == "true",
+		RequireActivation:  os.Getenv("REQUIRE_ACTIVATION") == "true",
 		DemoBotsEnabled:    os.Getenv("DEMO_BOTS_ENABLED") == "true",
 		DemoSeed:           os.Getenv("DEMO_SEED") == "true",
 		DemoCatalog:        envOr("DEMO_CATALOG", "frontend/app/catalog.json"),

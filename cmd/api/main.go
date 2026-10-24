@@ -462,7 +462,7 @@ func main() {
 		db,
 		userRepository,
 		jwtService,
-	)
+	).RequireActivation(cfg.RequireActivation)
 
 	// --------------------------------------------------
 	// Sessions and rate limiting

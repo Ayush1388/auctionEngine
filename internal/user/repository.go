@@ -39,6 +39,20 @@ func (r *Repository) WithTx(tx pgx.Tx) *Repository {
 	}
 }
 
+// CreateActivated inserts a user who can sign in straight away (no activation email).
+func (r *Repository) CreateActivated(ctx context.Context, user User) error {
+	_, err := r.db.Exec(ctx, `INSERT INTO users (id, email, password_hash, activated_at) VALUES ($1, $2, $3, $4)`,
+		user.ID, user.Email, user.PasswordHash, user.ActivatedAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrEmailAlreadyExists
+		}
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) Create(
 	ctx context.Context,
 	user User,

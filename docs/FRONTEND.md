@@ -32,7 +32,7 @@ Demo accounts (real backend after `demobots seed`, and the demo engine): `demo@m
 | **Lot** | bids, wallet, WebSocket | A bid in one window appears in the others in milliseconds. Two people bidding in the same instant: exactly one wins, the other is told the new minimum and how long it waited behind the winner. Held money is shown and released the moment you are outbid. A bid in the last two minutes extends the close. Double-clicking Bid places one bid (same `Idempotency-Key`). |
 | **Behind the bid** | `Server-Timing`, WebSocket timestamps | The journey of one bid: network and gateway, the row lock, the rules, the write, the commit, the outbox to fan-out, the click to the live update. Each number says where it comes from. |
 | **Stress it** | `cmd/demobots` or the demo engine | 200 bidders read the same price and bid at once for several rounds. The page then checks, from the outside, that the history is strictly increasing, the counts match, one bidder leads and nothing failed. |
-| Sign in, create, activate | `/v1/users/*`, `/v1/auth/*` | Argon2id accounts, activation tokens, JWT access tokens and rotating refresh tokens (per tab, so two windows can be two people) |
+| Sign in, create account | `/v1/users/*`, `/v1/auth/*` | Argon2id accounts with a password policy, JWT access tokens and rotating refresh tokens (per tab, so two windows can be two people) |
 | Wallet | `/v1/wallet`, `/deposits`, `/ledger` | Available and held money, idempotent deposits, and the double-entry statement |
 | My bids | the ledger, bid history | Leading, outbid, won, lost, saved; worked out from the ledger, which records every hold, release and sale |
 | Sell a car | `POST /v1/auctions`, `/cancel` | A listing form that maps the server's field errors, a live preview, my listings with cancel |
@@ -149,7 +149,7 @@ On the hosted demo (no API) the same page drives the demo engine's modelled faul
 - Proxy bidding is covered by Go integration tests (`internal/bidding/proxy_test.go`) that need `TEST_DATABASE_URL`; they skip without it.
 - Type-ahead (`/suggest`) is Elasticsearch-only on the API. Without Elasticsearch the page falls back to matching the open lots' titles in the browser.
 - Search without Elasticsearch has no typo tolerance; the page says which backend answered.
-- Activation links in emails point at the API (`/v1/users/activate?token=`). The Activate tab takes the token from that link.
+- Creating an account signs you in straight away: there is no activation email. The password policy is in `app/passwordPolicy.js` (the API enforces the same rules in `internal/user/password_policy.go`).
 - Tokens live in `sessionStorage`: they are readable by script on the page. That is a known trade-off for a token-in-header API; the API sets a strict CSP on its own responses.
 - `Server-Timing` splits a bid into lock, rules, write and commit when bidding runs in the API process. With the bidding service split out over gRPC the gateway reports the whole call as one step.
 

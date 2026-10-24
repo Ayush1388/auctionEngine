@@ -92,12 +92,14 @@ test("validation mirrors the API: field errors, future start, duration limits", 
   rejects(() => w.createAuction(seller.id, { item: { name: "x", type: "car" }, starting_price: 1, starts_at: new Date(now() + 5000).toISOString(), ends_at: new Date(now() + 5000 + 30_000).toISOString() }), 400);
 });
 
-test("accounts: 15 character passwords, activation, login, refresh rotation and reuse detection", () => {
+test("accounts: the password policy, sign in straight after sign up, refresh rotation and reuse detection", () => {
   const { w } = setup();
   rejects(() => w.register("n@x.test", "short"), 400);
-  const { activationToken } = w.register("n@x.test", "a-long-enough-password");
-  rejects(() => w.login("n@x.test", "a-long-enough-password"), 403, /not activated/);
-  w.activate(activationToken);
+  const why = (e, p) => { try { w.register(e, p); } catch (x) { return x.body?.fields?.password; } return null; };
+  assert.match(why("n@x.test", "aaaaaaaaaaaaaaaa"), /repeated/);
+  assert.match(why("nathaniel@x.test", "my-nathaniel-secret-pass"), /email name/);
+  w.register("n@x.test", "a-long-enough-password");
+  rejects(() => w.register("n@x.test", "a-long-enough-password"), 409);
   rejects(() => w.login("n@x.test", "wrong"), 401);
   const s = w.login("n@x.test", "a-long-enough-password");
   assert.equal(w.authenticate(s.access_token).email, "n@x.test");

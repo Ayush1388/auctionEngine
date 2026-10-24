@@ -302,7 +302,7 @@ NOT_ACTIVE ──(starts_at)──► ACTIVE ──(ends_at)──► COMPLETED
 <summary><b>Auth, sessions and abuse protection</b></summary>
 
 - **Argon2id** password hashing (parameters stored per hash, upgraded on login)
-- **Account activation** with hashed, expiring, single-use tokens, sent through the outbox
+- **Sign-up is an email and a password**, with a published password policy (15 to 128 characters, not one repeated character, not containing your email name). The optional email-activation step (hashed, expiring, single-use tokens through the outbox) is off by default; `REQUIRE_ACTIVATION=true` turns it on
 - **Short-lived JWT access tokens + rotating refresh tokens** with reuse detection and logout ([0008](docs/decisions/0008-access-and-refresh-tokens.md))
 - **RBAC**: `user` and `admin` roles; admin-only operator endpoints
 - **Token-bucket rate limiting** per IP, per user and per login email; `X-Forwarded-For` trusted only from configured proxies
@@ -337,8 +337,8 @@ NOT_ACTIVE ──(starts_at)──► ACTIVE ──(ends_at)──► COMPLETED
 
 | Method | Route | Auth | Description |
 |---|---|---|---|
-| `POST` | `/v1/users/register` | | Create an account and queue the activation email |
-| `GET` | `/v1/users/activate?token=…` | | Activate an account |
+| `POST` | `/v1/users/register` | | Create an account (signs in at once; with `REQUIRE_ACTIVATION=true`, queues the activation email) |
+| `GET` | `/v1/users/activate?token=…` | | Activate an account (only with `REQUIRE_ACTIVATION=true`) |
 | `POST` | `/v1/users/resend-activation` | | New activation email (always `204`, so it can't probe for accounts) |
 | `POST` | `/v1/users/login` | | Access token + refresh token |
 | `POST` | `/v1/auth/refresh` | | Rotate the refresh token, get a new access token |

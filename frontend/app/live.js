@@ -56,10 +56,8 @@ export function createLive(base = config.api) {
     onAuth: fn => session.on("change", fn),
     async register(email, password) {
       const { data } = await api.post("/v1/users/register", { email, password });
-      return { user: data, activation: null };
+      return { user: data };
     },
-    async activate(token) { return (await api.get("/v1/users/activate" + qs({ token }))).data; },
-    async resendActivation(email) { await api.post("/v1/users/resend-activation", { email }); },
     async login(email, password) {
       const { data } = await api.post("/v1/users/login", { email, password });
       session.set(data, data.user);

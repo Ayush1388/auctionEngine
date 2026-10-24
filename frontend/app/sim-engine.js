@@ -16,6 +16,7 @@
 import { uuid } from "./util.js";
 import { SNIPE_WINDOW, MAX_EXTENSIONS, MIN_DURATION, MAX_DURATION, MAX_START_DELAY } from "./rules.js";
 import { nextAutoBid } from "./proxy-rules.js";
+import { checkPassword } from "./passwordPolicy.js";
 
 export { SNIPE_WINDOW, MAX_EXTENSIONS, MIN_DURATION, MAX_DURATION, MAX_START_DELAY };
 export const MAX_DEPOSIT = 1_000_000_000;   // the backend's wallet.MaxDeposit: $10,000,000 a deposit
@@ -68,26 +69,12 @@ export class World {
   register(email, password) {
     const fields = {};
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email || "")) fields.email = "must be a valid email address";
-    if (!password || password.length < 15) fields.password = "must be at least 15 characters";
-    else if (password.length > 128) fields.password = "must be at most 128 characters";
+    const pw = checkPassword(password || "", email);
+    if (!pw.ok) fields.password = pw.message;
     if (Object.keys(fields).length) throw new SimError(400, "invalid input", { fields });
     if (this.emails.has(email.toLowerCase())) throw new SimError(409, "email already exists");
-    const u = this.addUser({ email, password, activated: false });
-    u.token = "act_" + uuid().replace(/-/g, "");
-    return { user: { id: u.id, email: u.email }, activationToken: u.token };
-  }
-
-  activate(token) {
-    const u = [...this.users.values()].find(x => x.token && x.token === token && !x.activated_at);
-    if (!u) throw new SimError(400, "invalid or expired activation token");
-    u.activated_at = iso(this.now()); u.token = null;
-    return { message: "account activated" };
-  }
-
-  resendActivation(email) {
-    const u = this.users.get(this.emails.get((email || "").toLowerCase()));
-    if (u && !u.activated_at) u.token = "act_" + uuid().replace(/-/g, "");
-    return u && !u.activated_at ? u.token : null;
+    const u = this.addUser({ email, password });   // an account is an email and a password: no activation step
+    return { user: { id: u.id, email: u.email, activated_at: u.activated_at } };
   }
 
   #issue(u) {
@@ -101,7 +88,6 @@ export class World {
   login(email, password) {
     const u = this.users.get(this.emails.get((email || "").toLowerCase()));
     if (!u || u.password !== password) throw new SimError(401, "invalid email or password");
-    if (!u.activated_at) throw new SimError(403, "account is not activated");
     return { ...this.#issue(u), user: { id: u.id, email: u.email, activated_at: u.activated_at } };
   }
 

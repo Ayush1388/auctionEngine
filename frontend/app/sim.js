@@ -124,8 +124,6 @@ class Host {
     const me = () => w.authenticate(token);
     switch (method) {
       case "register": return w.register(...args);
-      case "activate": return w.activate(args[0]);
-      case "resend": return { token: w.resendActivation(args[0]) };
       case "login": return w.login(...args);
       case "refresh": return w.refresh(args[0]);
       case "logout": return w.logout(args[0]);
@@ -431,10 +429,8 @@ export function createSim() {
     onAuth: fn => session.on("change", fn),
     async register(email, password) {
       const r = await call("register", [email, password]);
-      return { user: r.user, activation: { token: r.activationToken } };
+      return { user: r.user };
     },
-    activate: token => call("activate", [token]),
-    async resendActivation(email) { return (await call("resend", [email])).token; },
     async login(email, password) {
       const r = await call("login", [email, password]);
       session.set(r, r.user);

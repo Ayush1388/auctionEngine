@@ -236,3 +236,42 @@ func weakHash(t *testing.T, password string) string {
 		base64.RawStdEncoding.EncodeToString(key),
 	)
 }
+
+func TestRegisterWithoutActivationSignsInAtOnce(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	jwt := user.NewJWTService("0123456789abcdef0123456789abcdef", "test", time.Hour)
+	service := user.NewService(pool, user.NewRepository(pool), jwt).RequireActivation(false)
+
+	registered, err := service.Register(ctx, user.RegisterInput{Email: "bob@example.com", Password: testPassword})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if registered.ActivatedAt == nil {
+		t.Fatal("a new account should be activated already")
+	}
+
+	var emails int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_type = 'email.activation'`).Scan(&emails); err != nil {
+		t.Fatal(err)
+	}
+	if emails != 0 {
+		t.Fatalf("no activation email should be queued, found %d", emails)
+	}
+
+	if _, err := service.Login(ctx, user.LoginInput{Email: "bob@example.com", Password: testPassword}); err != nil {
+		t.Fatalf("Login right after Register: %v", err)
+	}
+
+	if _, err := service.Register(ctx, user.RegisterInput{Email: "bob@example.com", Password: testPassword}); !errors.Is(err, user.ErrEmailAlreadyExists) {
+		t.Fatalf("duplicate email: got %v", err)
+	}
+}
+
+func TestRegisterRejectsWeakPassword(t *testing.T) {
+	service, _ := newService(t)
+	_, err := service.Register(context.Background(), user.RegisterInput{Email: "carol@example.com", Password: "carol-is-in-this-password"})
+	if err == nil {
+		t.Fatal("a password containing the email name must be rejected")
+	}
+}

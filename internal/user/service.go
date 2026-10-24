@@ -48,6 +48,10 @@ type Service struct {
 	repository *Repository
 	validator  *validation.Validator
 	jwt        *JWTService
+
+	// requireActivation turns on the email-token step: a new account cannot sign in
+	// until it follows the link. Off, sign-up is just an email and a password.
+	requireActivation bool
 }
 
 func NewService(
@@ -60,7 +64,15 @@ func NewService(
 		repository: repository,
 		validator:  validation.New(),
 		jwt:        jwtService,
+
+		requireActivation: true,
 	}
+}
+
+// RequireActivation switches the email-token step on or off (REQUIRE_ACTIVATION).
+func (s *Service) RequireActivation(on bool) *Service {
+	s.requireActivation = on
+	return s
 }
 
 func (s *Service) Register(
@@ -73,12 +85,25 @@ func (s *Service) Register(
 		return User{}, err
 	}
 
+	if err := ValidatePassword(input.Email, input.Password); err != nil {
+		return User{}, err
+	}
+
 	passwordHash, err := HashPassword(input.Password)
 	if err != nil {
 		return User{}, fmt.Errorf(
 			"failed to hash password: %w",
 			err,
 		)
+	}
+
+	if !s.requireActivation {
+		now := time.Now()
+		newUser := User{ID: uuid.New(), Email: input.Email, PasswordHash: passwordHash, ActivatedAt: &now}
+		if err := s.repository.CreateActivated(ctx, newUser); err != nil {
+			return User{}, err
+		}
+		return newUser, nil
 	}
 
 	rawToken, tokenHash, err := GenerateActivationToken()
@@ -230,7 +255,7 @@ func (s *Service) Login(
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	if existingUser.ActivatedAt == nil {
+	if s.requireActivation && existingUser.ActivatedAt == nil {
 		return LoginResult{}, ErrAccountNotActivated
 	}
 
