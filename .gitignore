@@ -11,3 +11,6 @@ tmp/
 .DS_Store
 deploy/.env
 deploy/backups/
+
+# database dumps are never committed
+*.dump

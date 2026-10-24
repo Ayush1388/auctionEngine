@@ -122,6 +122,9 @@ type SeedOptions struct {
 	// operator a private login. When both are set the public demo operator
 	// (admin@marque.test, a known password) is not created, and is demoted if it exists.
 	AdminEmail, AdminPassword string
+	// MinDuration (DEMO_LOT_HOURS) makes every new lot last at least this long, on top of
+	// its catalogue length, so a hosted demo does not run dry within the hour.
+	MinDuration time.Duration
 }
 
 // SeedResult says what Seed did.
@@ -216,8 +219,8 @@ func (b *Bots) Seed(ctx context.Context, opt SeedOptions) (SeedResult, error) {
 			continue
 		}
 
-		ends := time.Duration(l.EndsIn) * time.Second
-		if opt.Soon > 0 && l.Key == "gt500" {
+		ends := time.Duration(l.EndsIn)*time.Second + opt.MinDuration
+		if opt.Soon > 0 && l.Key == "gt500" { // a sale you can watch end beats a long one
 			ends = opt.Soon
 		}
 		now := time.Now().UTC()
@@ -295,4 +298,41 @@ func (b *Bots) ensureRivals(ctx context.Context) ([]uuid.UUID, error) {
 	}
 	b.rivals = ids
 	return ids, nil
+}
+
+// SeedDefault seeds with the options the bots were built with.
+func (b *Bots) SeedDefault(ctx context.Context) (SeedResult, error) {
+	return b.Seed(ctx, b.o.Seed)
+}
+
+// Keep seeds now and then every `every`, until ctx ends, so the demo always has
+// open lots: a lot that has closed is replaced by a fresh one (the closed
+// auction and its history stay). Seeding is idempotent, so a lot that is still
+// open is left alone.
+func (b *Bots) Keep(ctx context.Context, every time.Duration) {
+	run := func() {
+		rc, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		res, err := b.SeedDefault(rc)
+		switch {
+		case err != nil:
+			b.o.Logger.Error("demo seed failed", "error", err)
+		case res.Created > 0:
+			b.o.Logger.Info("demo catalogue refreshed", "created", res.Created, "kept", res.Kept)
+		}
+	}
+	run()
+	if every <= 0 {
+		return
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
 }
