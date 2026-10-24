@@ -156,6 +156,8 @@ export function createLive(base = config.api) {
       /** { enabled, ambient: { on, bids, refused, ... }, message } */
       async get() { return (await api.get("/v1/demo/bots")).data; },
       async setAmbient(on) { return (await api.request("PUT", "/v1/demo/bots", { body: { ambient: !!on }, auth: true })).data; },
+      /** Operator only: put a fresh open lot next to every catalogue car that has closed. */
+      async seed() { return (await api.post("/v1/demo/seed", undefined, { auth: true })).data; },
     },
 
     stress: {

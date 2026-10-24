@@ -11,9 +11,12 @@
 // parseItem() strips it for display; encodeDescription() writes it. Listings
 // created elsewhere (no block) still render, with a generic photo.
 import { toCents, local } from "./util.js";
+import catalog from "./catalog.json";
 
 const MARK = "[[marque:";
-const FALLBACK_IMG = "assets/hero.jpg";
+const FALLBACK_IMG = "/assets/hero.jpg";
+/** Photo paths are stored relative ("assets/x.jpg"); a single-page app needs them from the site root. */
+export const absUrl = p => (!p || /^(https?:|data:|blob:|\/)/.test(p) ? p : "/" + p);
 
 export function encodeDescription(prose, meta) {
   return `${(prose || "").trim()}\n\n${MARK}${JSON.stringify(meta)}]]`;
@@ -29,11 +32,8 @@ export function parseItem(item = {}) {
   return { title: item.name || "Untitled lot", kind: item.type || "", prose, meta };
 }
 
-let catalogP;
-/** The shared catalogue (also what the Go seeder reads). */
-export function loadCatalog() {
-  return catalogP ||= fetch(new URL("catalog.json", import.meta.url)).then(r => r.json()).catch(() => ({ lots: [] }));
-}
+/** The shared catalogue (also what the Go seeder reads). Bundled, so it is always there. */
+export const loadCatalog = () => Promise.resolve(catalog);
 
 /** Catalogue entry -> the metadata block stored with a seeded auction. */
 export function metaOf(lot) {
@@ -56,7 +56,7 @@ export function toLot(a) {
     ownerId: a.owner_id,
     title: it.title,
     alt: m.alt || it.title,
-    img: (m.localPhoto && local.get("marque-photo:" + m.localPhoto)) || m.img || FALLBACK_IMG,
+    img: absUrl((m.localPhoto && local.get("marque-photo:" + m.localPhoto)) || m.img || FALLBACK_IMG),
     pos: m.pos || "50% 60%",
     year: m.year, make: m.make, model: m.model, type: m.type || it.kind,
     where: m.where || "",
