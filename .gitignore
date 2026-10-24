@@ -19,3 +19,4 @@ frontend/dist/
 .playwright-mcp/
 .api.log
 *.dump
+frontend/.vite/
