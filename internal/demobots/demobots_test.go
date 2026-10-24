@@ -18,7 +18,7 @@ import (
 )
 
 func TestDisabledHandlerAnswers404ExceptState(t *testing.T) {
-	h := demobots.NewHandler(nil, "")
+	h := demobots.NewHandler(nil)
 	rec := httptest.NewRecorder()
 	h.State(rec, httptest.NewRequest("GET", "/v1/demo/bots", nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"enabled":false`) {
@@ -111,5 +111,47 @@ func TestAmbientRivalsSwitchOnAndOff(t *testing.T) {
 	}
 	if bots.Ambient().On {
 		t.Fatal("still on after SetAmbient(false)")
+	}
+}
+
+// The hosted demo ran dry once every lot had closed. Seeding again must put a fresh
+// open lot next to each closed one (and keep the closed auction and its history).
+func TestSeedReplacesClosedLots(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	bots := demobots.New(demobots.Options{
+		Pool: pool, Bidder: bidding.NewService(pool, bidding.Pessimistic),
+		Auctions: auction.NewService(pool, auction.NewRepository(pool)), Wallets: wallet.NewService(pool),
+		Seed: demobots.SeedOptions{Catalog: "../../frontend/app/catalog.json", MinDuration: 72 * time.Hour},
+	})
+	first, err := bots.SeedDefault(ctx)
+	if err != nil || first.Created == 0 {
+		t.Fatalf("first seed: %+v %v", first, err)
+	}
+	if again, err := bots.SeedDefault(ctx); err != nil || again.Created != 0 || again.Kept != first.Created {
+		t.Fatalf("seeding twice must change nothing: %+v %v", again, err)
+	}
+	var open int
+	pool.QueryRow(ctx, `SELECT count(*) FROM auctions WHERE status = 'ACTIVE' AND ends_at > now() + interval '70 hours'`).Scan(&open)
+	if open != first.Created {
+		t.Fatalf("every lot should last at least 72 hours, %d of %d do", open, first.Created)
+	}
+
+	// the lifecycle worker has closed everything
+	if _, err := pool.Exec(ctx, `UPDATE auctions SET status = 'COMPLETED', ends_at = now() - interval '1 minute'`); err != nil {
+		t.Fatal(err)
+	}
+	var closed int
+	pool.QueryRow(ctx, `SELECT count(*) FROM auctions WHERE status = 'COMPLETED'`).Scan(&closed)
+
+	res, err := bots.SeedDefault(ctx)
+	if err != nil || res.Created != first.Created || res.Kept != 0 {
+		t.Fatalf("re-seed after everything closed: %+v %v", res, err)
+	}
+	var nowOpen, stillClosed int
+	pool.QueryRow(ctx, `SELECT count(*) FROM auctions WHERE status = 'ACTIVE'`).Scan(&nowOpen)
+	pool.QueryRow(ctx, `SELECT count(*) FROM auctions WHERE status = 'COMPLETED'`).Scan(&stillClosed)
+	if nowOpen != first.Created || stillClosed != closed {
+		t.Fatalf("want %d open and %d closed kept, got %d open and %d closed", first.Created, closed, nowOpen, stillClosed)
 	}
 }

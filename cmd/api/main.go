@@ -521,20 +521,19 @@ func main() {
 	// and the breakers apply to them too.
 	var demoHandler *demobots.Handler
 	if cfg.DemoBotsEnabled {
-		bots := demobots.New(demobots.Options{Pool: db, Bidder: bidder, Auctions: auctionService, Wallets: walletService, Logger: logger})
-		demoHandler = demobots.NewHandler(bots, cfg.DemoCatalog)
+		bots := demobots.New(demobots.Options{
+			Pool: db, Bidder: bidder, Auctions: auctionService, Wallets: walletService, Logger: logger,
+			Seed: demobots.SeedOptions{
+				Catalog: cfg.DemoCatalog, AdminEmail: cfg.DemoAdminEmail, AdminPassword: cfg.DemoAdminPassword,
+				MinDuration: time.Duration(cfg.DemoLotHours) * time.Hour,
+			},
+		})
+		demoHandler = demobots.NewHandler(bots)
 		logger.Warn("DEMO_BOTS_ENABLED: demo bots can be switched on from the website; do not enable this in production")
 		if cfg.DemoSeed {
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-				defer cancel()
-				res, err := bots.Seed(ctx, demobots.SeedOptions{Catalog: cfg.DemoCatalog, AdminEmail: cfg.DemoAdminEmail, AdminPassword: cfg.DemoAdminPassword})
-				if err != nil {
-					logger.Error("demo seed failed", "error", err)
-					return
-				}
-				logger.Info("demo catalogue ready", "created", res.Created, "kept", res.Kept)
-			}()
+			// Loads the cars at start-up, then keeps every one of them on offer: a lot that
+			// closes is replaced by a fresh one, so the demo never runs out of open lots.
+			go bots.Keep(context.Background(), cfg.DemoRefreshEvery)
 		}
 	}
 

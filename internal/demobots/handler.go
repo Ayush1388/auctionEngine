@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,11 +21,10 @@ import (
 //
 // With the bots disabled (the default) every route but GET answers 404.
 type Handler struct {
-	bots    *Bots // nil when disabled
-	catalog string
+	bots *Bots // nil when disabled
 }
 
-func NewHandler(b *Bots, catalog string) *Handler { return &Handler{bots: b, catalog: catalog} }
+func NewHandler(b *Bots) *Handler { return &Handler{bots: b} }
 
 type stateResponse struct {
 	Enabled bool         `json:"enabled"`
@@ -138,7 +136,7 @@ func (h *Handler) Seed(w http.ResponseWriter, r *http.Request) {
 	if h.off(w) {
 		return
 	}
-	res, err := h.bots.Seed(r.Context(), SeedOptions{Catalog: h.catalog, AdminEmail: os.Getenv("DEMO_ADMIN_EMAIL"), AdminPassword: os.Getenv("DEMO_ADMIN_PASSWORD")})
+	res, err := h.bots.SeedDefault(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "could not load the demo cars: "+err.Error())
 		return

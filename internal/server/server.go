@@ -171,7 +171,7 @@ func demoOr(h *demobots.Handler) *demobots.Handler {
 	if h != nil {
 		return h
 	}
-	return demobots.NewHandler(nil, "")
+	return demobots.NewHandler(nil)
 }
 
 // proxyOr returns h, or a handler whose service is missing (tests that do not

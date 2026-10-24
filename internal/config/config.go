@@ -69,6 +69,12 @@ type Config struct {
 	DemoSeed        bool
 	DemoCatalog     string
 
+	// DemoRefreshEvery is how often the seeder checks that every catalogue car has an
+	// open lot (DEMO_REFRESH_EVERY, default 10m, 0 turns the checks off after the first).
+	// DemoLotHours makes new lots last at least that long (DEMO_LOT_HOURS).
+	DemoRefreshEvery time.Duration
+	DemoLotHours     int
+
 	// DemoAdminEmail and DemoAdminPassword give the seeded operator a private
 	// login instead of the public demo one.
 	DemoAdminEmail, DemoAdminPassword string
@@ -255,6 +261,18 @@ func Load() (Config, error) {
 		)
 	}
 
+	demoRefresh, err := envDuration("DEMO_REFRESH_EVERY", 10*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	demoHours := 0
+	if v := os.Getenv("DEMO_LOT_HOURS"); v != "" {
+		demoHours, err = strconv.Atoi(v)
+		if err != nil || demoHours < 0 {
+			return Config{}, fmt.Errorf("invalid DEMO_LOT_HOURS: %q", v)
+		}
+	}
+
 	drainDelay, err := envDuration("DRAIN_DELAY", 0)
 	if err != nil {
 		return Config{}, err
@@ -294,6 +312,8 @@ func Load() (Config, error) {
 		DemoBotsEnabled:    os.Getenv("DEMO_BOTS_ENABLED") == "true",
 		DemoSeed:           os.Getenv("DEMO_SEED") == "true",
 		DemoCatalog:        envOr("DEMO_CATALOG", "frontend/app/catalog.json"),
+		DemoRefreshEvery:   demoRefresh,
+		DemoLotHours:       demoHours,
 		DemoAdminEmail:     os.Getenv("DEMO_ADMIN_EMAIL"),
 		DemoAdminPassword:  os.Getenv("DEMO_ADMIN_PASSWORD"),
 
