@@ -47,6 +47,8 @@ class Host {
   async start() {
     const saved = local.json(SAVE_KEY);
     try { if (saved && saved.v === 1) this.world = World.fromJSON(saved); } catch { this.world = null; }
+    // a returning visitor whose lots have all closed gets a fresh house, not an empty one
+    if (this.world && ![...this.world.auctions.values()].some(x => x.status === "ACTIVE" || x.status === "NOT_ACTIVE")) this.world = null;
     if (!this.world) { this.world = new World(); await this.#seed(); this.save(); }
     this.rivals = [...this.world.users.values()].filter(u => u.bot && u.email.startsWith("bidder-"));
     this.world.onEvent(ev => this.#publish(ev));

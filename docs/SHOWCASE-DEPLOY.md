@@ -77,9 +77,9 @@ Elasticsearch and Kafka need about 2 GB between them; with 12 GB you have room. 
 ## 2. The frontend on Vercel
 
 1. Vercel, Add New Project, import the GitHub repository.
-2. **Root Directory: `frontend`**. Framework preset: Other. No build command, no output directory (it is plain HTML, CSS and ES modules; `vercel.json` sets the headers).
+2. **Root Directory: `frontend`**. Framework preset: Vite (`vercel.json` already sets `npm run build`, the `dist` output folder, the single-page rewrite and the headers).
 3. Deploy. The site already works on the demo engine.
-4. Point it at the backend: edit `frontend/app/runtime.js`, set `api: "https://api.<your-ip>.nip.io"`, commit and push. Vercel redeploys. (A visitor can also try `?api=https://...` once; the choice is remembered.)
+4. Point it at the backend: Project Settings, Environment Variables, add `VITE_API_URL` = the API's origin (`https://api.<your-ip>.nip.io`, or your Render URL, no trailing slash), then redeploy. (A visitor can also try `?api=https://...` once; the choice is remembered.)
 5. Put the Vercel URL in `CORS_ALLOWED_ORIGINS` on the VM and restart the API:
 
 ```bash

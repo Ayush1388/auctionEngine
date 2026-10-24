@@ -1,9 +1,11 @@
 # The frontend
 
-A vintage-car auction site (Marque) built on the engine. It is plain HTML, CSS and ES modules: no build step, no framework. Its job is to make the backend visible: every page reads from the real API, updates live over the WebSocket, and can show what happened behind a bid.
+A vintage-car auction site (Marque) built on the engine. It is a React single-page app (Vite, React Router, GSAP for motion) on top of framework-free client modules in `app/` (the two backends, the bidding session, the rules engine) that the node tests exercise directly. `src/` holds the pages, components and hooks. Its job is to make the backend visible: every page reads from the real API, updates live over the WebSocket, and can show what happened behind a bid.
 
 ```bash
-cd frontend && python3 -m http.server 5173      # http://localhost:5173
+cd frontend && npm install && npm run dev       # http://localhost:5173
+npm run build                                   # production bundle in frontend/dist
+npm test                                        # the demo engine's rules
 ```
 
 ## Three ways to run it
@@ -116,7 +118,7 @@ Both backends implement one interface (`app/live.js` and `app/sim.js`), so a pag
 
 ## Hosting a demo
 
-Publish the `frontend/` folder to any static host (Netlify, Vercel, GitHub Pages). With no API reachable it runs on the demo engine, so the link works for anyone, with no backend. To point a hosted copy at a deployed API, add its origin to `CORS_ALLOWED_ORIGINS` and open the page once with `?api=https://your-api.example`.
+Build with `npm run build` and publish `frontend/dist` to any static host, with every unknown path rewritten to `index.html` (the routes are client-side; `vercel.json` does this for Vercel). With no API reachable it runs on the demo engine, so the link works for anyone, with no backend. To point a hosted copy at a deployed API, add its origin to `CORS_ALLOWED_ORIGINS` on the API and set `VITE_API_URL` at build time (or open the page once with `?api=https://your-api.example`).
 
 ## Recording the demo
 
