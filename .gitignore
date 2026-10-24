@@ -11,3 +11,9 @@ tmp/
 .DS_Store
 deploy/.env
 deploy/backups/
+frontend/node_modules/
+frontend/dist/
+.dev.log
+.playwright-mcp/
+.api.log
+*.dump

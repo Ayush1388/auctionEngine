@@ -1,0 +1,13 @@
+/* Only what the React version adds. Everything else is the site's own stylesheets. */
+.boot { padding: 40vh var(--pad) 0; }
+.botsrow-wrap { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.botsrow-wrap .botsrow { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
+.botsrow-seed { margin-top: 8px; }
+.route-fade { animation: routeIn .35s ease-out both; }
+@keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .route-fade { animation: none; } }
+
+.trust-body > section + section, .lab-stack > section + section { margin-top: clamp(32px, 4.5vw, 60px); }
+.trust-body > section { margin-top: 0; }
+.trust-body > section + section { margin-top: clamp(32px, 4.5vw, 60px); }
+.r-countered { background: rgba(229, 83, 75, .16); color: #ff9c94; }

@@ -27,7 +27,7 @@ make e2e                             # drive it end to end from outside
 ```bash
 make infra && cp .env.example .env && make migrate
 DEMO_BOTS_ENABLED=true DEMO_SEED=true CHAOS_ENABLED=true make run  # the API on :4000, with the demo cars, the bots and the chaos lab built in
-cd frontend && python3 -m http.server 5173                         # http://localhost:5173 (the bots switch is in the badge, bottom left)
+cd frontend && npm install && npm run dev                          # http://localhost:5173 (the bots switch is in the badge, bottom left)
 ```
 
 No backend? The frontend runs alone on a built-in demo engine with the same rules, so a hosted copy works for anyone: publish the `frontend/` folder to any static host. Details: [`docs/FRONTEND.md`](docs/FRONTEND.md).
