@@ -16,7 +16,10 @@ export function getBackend() {
     const wantSim = config.engine === "sim" || (config.engine === "auto" && !config.api);
     if (!wantSim) {
       const live = createLive();
-      try { await withTimeout(live.ready(), 1500); return live; }
+      // A local API answers at once. A hosted one on a free plan sleeps when idle and needs up to
+      // a minute to wake, so wait for it rather than quietly showing the demo engine instead.
+      const remote = !/^https?:\/\/(localhost|127\.0\.0\.1)/.test(config.api || "");
+      try { await withTimeout(live.ready(), remote ? 60000 : 1500); return live; }
       catch (e) {
         if (config.engine === "live") { live.unreachable = e; return live; }       // asked for the real one: let pages show the error
         live.feed.stop();

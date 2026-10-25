@@ -16,7 +16,14 @@ export function BackendProvider({ children }) {
     });
     return () => { on = false; };
   }, []);
-  if (!be) return <div className="boot" role="status" aria-label="Connecting to the engine"><div className="skel" style={{ height: 64 }} /></div>;
+  const [slow, setSlow] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setSlow(true), 4000); return () => clearTimeout(t); }, []);
+  if (!be) return (
+    <div className="boot" role="status" aria-label="Connecting to the engine">
+      <div className="skel" style={{ height: 64 }} />
+      {slow && <p className="small muted">Waking the server. Free hosting sleeps when idle, so the first visit can take up to a minute.</p>}
+    </div>
+  );
   return <Ctx.Provider value={be}>{children}</Ctx.Provider>;
 }
 
