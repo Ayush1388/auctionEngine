@@ -53,6 +53,7 @@ Then edit `deploy/.env` and set:
 | `CORS_ALLOWED_ORIGINS` | your Vercel URL, for example `https://marque-demo.vercel.app` (add it after step 2) |
 | `CHAOS_ENABLED` | `true` |
 | `DEMO_BOTS_ENABLED` | `true` |
+| `APP_BASE_URL` | your site's address, for example `https://auctionengine-frontend.vercel.app` (the password reset email links to it; the email only arrives if the `SMTP_*` settings point at a working mail server) |
 | `DEMO_SEED` | `true` (loads the 12 cars on first start) |
 | `DEMO_ADMIN_EMAIL` | the operator's private login, for example `op-xxxxxxxxxx@marque.test` |
 | `DEMO_ADMIN_PASSWORD` | a long random password (15 characters or more) |

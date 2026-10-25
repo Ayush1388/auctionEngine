@@ -69,6 +69,11 @@ type Config struct {
 	// Off by default: an account is an email and a password.
 	RequireActivation bool
 
+	// AutoMigrate applies pending migrations when the API starts (AUTO_MIGRATE). On by default
+	// for a showcase (DEMO_BOTS_ENABLED), where there is no release step to run them; the
+	// migration runner holds an advisory lock, so several instances starting together are safe.
+	AutoMigrate bool
+
 	DemoBotsEnabled bool
 	DemoSeed        bool
 	DemoCatalog     string
@@ -314,6 +319,7 @@ func Load() (Config, error) {
 		RateLimitsEnabled:  rateLimits,
 		ChaosEnabled:       os.Getenv("CHAOS_ENABLED") == "true",
 		RequireActivation:  os.Getenv("REQUIRE_ACTIVATION") == "true",
+		AutoMigrate:        envBoolOr("AUTO_MIGRATE", os.Getenv("DEMO_BOTS_ENABLED") == "true"),
 		DemoBotsEnabled:    os.Getenv("DEMO_BOTS_ENABLED") == "true",
 		DemoSeed:           os.Getenv("DEMO_SEED") == "true",
 		DemoCatalog:        envOr("DEMO_CATALOG", "frontend/app/catalog.json"),
@@ -376,4 +382,14 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+func envBoolOr(key string, fallback bool) bool {
+	switch os.Getenv(key) {
+	case "true":
+		return true
+	case "false":
+		return false
+	}
+	return fallback
 }

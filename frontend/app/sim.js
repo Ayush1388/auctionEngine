@@ -124,6 +124,8 @@ class Host {
     const me = () => w.authenticate(token);
     switch (method) {
       case "register": return w.register(...args);
+      case "forgotPassword": return { token: w.forgotPassword(args[0]) };
+      case "resetPassword": return w.resetPassword(args[0], args[1]);
       case "login": return w.login(...args);
       case "refresh": return w.refresh(args[0]);
       case "logout": return w.logout(args[0]);
@@ -431,6 +433,8 @@ export function createSim() {
       const r = await call("register", [email, password]);
       return { user: r.user };
     },
+    async forgotPassword(email) { return (await call("forgotPassword", [email])).token; },   // the token, for the demo to show
+    async resetPassword(token, password) { await call("resetPassword", [token, password]); },
     async login(email, password) {
       const r = await call("login", [email, password]);
       session.set(r, r.user);

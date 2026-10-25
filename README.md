@@ -340,6 +340,8 @@ NOT_ACTIVE ──(starts_at)──► ACTIVE ──(ends_at)──► COMPLETED
 | `POST` | `/v1/users/register` | | Create an account (signs in at once; with `REQUIRE_ACTIVATION=true`, queues the activation email) |
 | `GET` | `/v1/users/activate?token=…` | | Activate an account (only with `REQUIRE_ACTIVATION=true`) |
 | `POST` | `/v1/users/resend-activation` | | New activation email (always `204`, so it can't probe for accounts) |
+| `POST` | `/v1/users/forgot-password` | | Email a password reset link (always `204`, so it can't probe for accounts) |
+| `POST` | `/v1/users/reset-password` | | Set a new password from the link (single use, 1 hour, must meet the password policy, signs every other session out) |
 | `POST` | `/v1/users/login` | | Access token + refresh token |
 | `POST` | `/v1/auth/refresh` | | Rotate the refresh token, get a new access token |
 | `POST` | `/v1/auth/logout` | | Revoke the session |

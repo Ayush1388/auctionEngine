@@ -31,6 +31,7 @@ import (
 	"github.com/Ayush1388/auctionEngine/internal/health"
 	"github.com/Ayush1388/auctionEngine/internal/kafkax"
 	"github.com/Ayush1388/auctionEngine/internal/metrics"
+	"github.com/Ayush1388/auctionEngine/internal/migration"
 	"github.com/Ayush1388/auctionEngine/internal/outbox"
 	"github.com/Ayush1388/auctionEngine/internal/ratelimit"
 	"github.com/Ayush1388/auctionEngine/internal/realtime"
@@ -125,6 +126,14 @@ func main() {
 
 	logger.Info("connected to PostgreSQL")
 
+	if cfg.AutoMigrate {
+		if err := migration.NewRunner(db, "migrations").Quiet().Up(context.Background()); err != nil {
+			logger.Error("failed to apply migrations", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("migrations are up to date")
+	}
+
 	// PostgreSQL is the only CRITICAL dependency: without it nothing works,
 	// so the instance leaves the load balancer. Everything else degrades.
 	checker.Add("postgres", true, db.Ping)
@@ -207,6 +216,12 @@ func main() {
 		emailEventHandler,
 		// The raw token is a credential; drop it once the email is sent.
 		outbox.RedactOnSuccess("activation_token"),
+	)
+
+	outboxRouter.Register(
+		email.EventTypePasswordReset,
+		emailEventHandler,
+		outbox.RedactOnSuccess("reset_token"),
 	)
 
 	// --------------------------------------------------

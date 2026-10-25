@@ -58,6 +58,8 @@ export function createLive(base = config.api) {
       const { data } = await api.post("/v1/users/register", { email, password });
       return { user: data };
     },
+    async forgotPassword(email) { await api.post("/v1/users/forgot-password", { email }); return null; },   // the link goes by email
+    async resetPassword(token, password) { await api.post("/v1/users/reset-password", { token, password }); },
     async login(email, password) {
       const { data } = await api.post("/v1/users/login", { email, password });
       session.set(data, data.user);

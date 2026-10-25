@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/smtp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Ayush1388/auctionEngine/internal/breaker"
@@ -113,6 +114,37 @@ func (s *Service) SendActivationEmail(
 		return fmt.Errorf("failed to send activation email: %w", err)
 	}
 
+	return nil
+}
+
+// SendPasswordResetEmail sends the forgot-password link. The link opens the site's own
+// reset form (baseURL is the frontend, APP_BASE_URL).
+func (s *Service) SendPasswordResetEmail(ctx context.Context, to, resetToken string) error {
+	link := fmt.Sprintf("%s/account?tab=reset&token=%s", strings.TrimRight(s.baseURL, "/"), resetToken)
+	body := fmt.Sprintf(
+		"Someone asked to reset the password for this Marque account.\n\n"+
+			"Choose a new password here:\n\n%s\n\n"+
+			"The link works once and expires in 1 hour. If this was not you, ignore this email: your password has not changed.",
+		link,
+	)
+	message := []byte(
+		"From: " + s.from + "\r\n" +
+			"To: " + to + "\r\n" +
+			"Subject: Reset your Marque password\r\n" +
+			"Content-Type: text/plain; charset=UTF-8\r\n" +
+			"\r\n" +
+			body,
+	)
+	send := func(ctx context.Context) error { return s.send(ctx, to, message) }
+	var err error
+	if s.breaker != nil {
+		err = s.breaker.Do(ctx, send)
+	} else {
+		err = send(ctx)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to send password reset email: %w", err)
+	}
 	return nil
 }
 

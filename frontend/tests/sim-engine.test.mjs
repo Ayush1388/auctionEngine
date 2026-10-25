@@ -201,3 +201,19 @@ test("many maximums settle to the same result whatever order they arrive in", ()
   }
   assert.deepEqual([...results], ["3:4100"]);        // 4500 wins, one increment over 4000
 });
+
+test("forgot password: a link that works once, the password policy, and other sessions signed out", () => {
+  const { w } = setup();
+  w.register("r@x.test", "a-long-enough-password");
+  const old = w.login("r@x.test", "a-long-enough-password");
+  assert.equal(w.forgotPassword("nobody@x.test"), null);            // same answer as the real API: no hint
+  const token = w.forgotPassword("r@x.test");
+  assert.ok(token);
+  rejects(() => w.resetPassword("nope", "another-long-password-1"), 400, /invalid or has expired/);
+  rejects(() => w.resetPassword(token, "short"), 400);              // a weak password does not burn the link
+  w.resetPassword(token, "another-long-password-1");
+  rejects(() => w.resetPassword(token, "yet-another-long-password"), 400, /invalid or has expired/);   // once only
+  rejects(() => w.login("r@x.test", "a-long-enough-password"), 401);
+  w.login("r@x.test", "another-long-password-1");
+  rejects(() => w.refresh(old.refresh_token), 401);                 // the old session is gone
+});

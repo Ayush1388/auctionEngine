@@ -628,6 +628,87 @@
         }
       }
     },
+    "/v1/users/forgot-password": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Email a password reset link (always 204)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Accepted, whether or not the account exists"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "429": {
+            "description": "Too many requests"
+          }
+        }
+      }
+    },
+    "/v1/users/reset-password": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Set a new password from a reset link",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "password"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 15,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Password changed; every other session is signed out"
+          },
+          "400": {
+            "description": "Invalid input, a password that breaks the policy, or an invalid or expired link"
+          },
+          "429": {
+            "description": "Too many requests"
+          }
+        }
+      }
+    },
     "/v1/users/login": {
       "post": {
         "tags": [

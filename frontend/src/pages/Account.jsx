@@ -1,4 +1,4 @@
-// Sign in or create an account: an email and a password.
+// Sign in, create an account, or get back in after forgetting the password.
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useBackend } from "../hooks/backend.jsx";
@@ -28,6 +28,37 @@ function Field({ id, label, err, hint, ...input }) {
   );
 }
 
+/** A password field with a Show / Hide button, so you can check what you typed. */
+function PasswordField({ id, label, err, hint, ...input }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className={"field" + (err ? " invalid" : "")}>
+      <label htmlFor={id}>{label}</label>
+      <div className="pw">
+        <input id={id} type={shown ? "text" : "password"} aria-invalid={!!err} aria-describedby={err ? `${id}-e` : undefined} spellCheck={false} autoCapitalize="none" {...input} />
+        <button type="button" className="pw-toggle" aria-pressed={shown} aria-label={shown ? "Hide password" : "Show password"} onClick={() => setShown(s => !s)}>{shown ? "Hide" : "Show"}</button>
+      </div>
+      {hint ? <span className="hint">{hint}</span> : null}
+      <span className="err" id={`${id}-e`}>{err || ""}</span>
+    </div>
+  );
+}
+
+/** The password policy as a checklist that ticks off while you type. */
+function Policy({ password, policy }) {
+  return (
+    <div className="policy" aria-live="polite">
+      <p className="mono policy-head">Password policy</p>
+      <ul>
+        {policy.results.map(r => <li key={r.id} className={password ? (r.ok ? "met" : "unmet") : ""}><span aria-hidden="true">{r.ok && password ? "✓" : "○"}</span> {r.label}</li>)}
+      </ul>
+      <p className="small muted">Length is what makes a password hard to guess, so there is no capital-and-symbol rule. A few random words work well. {[...password].length} / 15 characters.</p>
+    </div>
+  );
+}
+
+const TITLES = { signin: "Sign in", create: "Create your account", forgot: "Forgot your password?", reset: "Choose a new password" };
+
 export default function Account() {
   useDocumentTitle("Marque | Sign in");
   const be = useBackend();
@@ -35,14 +66,16 @@ export default function Account() {
   const navigate = useNavigate();
   const [q, setQ] = useSearchParams();
   const next = safeNext(q.get("next"));
-  const [tab, setTab] = useState(q.get("tab") === "create" ? "create" : "signin");
-  const [state, setState] = useState({});                  // msg, fields
+  const [tab, setTab] = useState(q.get("token") ? "reset" : ["create", "forgot", "reset"].includes(q.get("tab")) ? q.get("tab") : "signin");
+  const [state, setState] = useState({});                  // msg, ok, fields
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const policy = checkPassword(password, email);
+  const [token, setToken] = useState(q.get("token") || "");
+  const [sent, setSent] = useState(null);                  // { email, token } after asking for a reset link
+  const policy = checkPassword(password, tab === "reset" ? "" : email);
 
-  const goTab = t => { setTab(t); setState({}); };
+  const goTab = t => { setTab(t); setState({}); setSent(null); setPassword(""); };
   const done = () => navigate(next === "/" ? "/bids" : next);
 
   const signIn = async (e, p) => {
@@ -57,10 +90,30 @@ export default function Account() {
     try { await be.register(email.trim(), password); await be.login(email.trim(), password); done(); }
     catch (x) { const { fields, msg } = errorsFor(x); setState({ fields, msg: x.status === 409 ? "An account with that email already exists. Sign in instead." : msg }); setBusy(false); }
   };
+  const forgot = async () => {
+    setBusy(true);
+    try { const t = await be.forgotPassword(email.trim()); setSent({ email: email.trim(), token: t || null }); setState({}); }
+    catch (x) { const { fields, msg } = errorsFor(x); setState({ fields, msg }); }
+    setBusy(false);
+  };
+  const reset = async () => {
+    if (!token.trim()) { setState({ fields: { token: "Paste the token from your reset link." } }); return; }
+    if (!policy.ok) { setState({ fields: { password: "Your password does not meet the policy yet." } }); return; }
+    setBusy(true);
+    try {
+      await be.resetPassword(token.trim(), password);
+      if (q.get("token")) setQ({}, { replace: true });
+      setTab("signin"); setPassword(""); setToken(""); setSent(null);
+      setState({ ok: "Password changed. Sign in with your new password." });
+    } catch (x) { const { fields, msg } = errorsFor(x); setState({ fields, msg }); }
+    setBusy(false);
+  };
   const submit = async e => {
     e.preventDefault();
     if (tab === "signin") await signIn(email.trim(), password);
-    else await register();
+    else if (tab === "create") await register();
+    else if (tab === "forgot") await forgot();
+    else await reset();
   };
 
   let body;
@@ -78,20 +131,25 @@ export default function Account() {
     );
   } else {
     const f = state.fields || {};
+    const main = tab === "signin" || tab === "create";
     body = (
       <>
-        <h1 id="authTitle" className="h1">{tab === "signin" ? "Sign in" : "Create your account"}</h1>
-        <div className="tabs" role="tablist" aria-label="Account">
-          {[["signin", "Sign in"], ["create", "Create account"]].map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => goTab(k)}>{l}</button>)}
-        </div>
+        <h1 id="authTitle" className="h1">{TITLES[tab]}</h1>
+        {main && (
+          <div className="tabs" role="tablist" aria-label="Account">
+            {[["signin", "Sign in"], ["create", "Create account"]].map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => goTab(k)}>{l}</button>)}
+          </div>
+        )}
         <div className="auth-panel">
           {state.msg && <p className="form-error" role="alert">{state.msg}</p>}
+          {state.ok && <p className="form-ok" role="status">{state.ok}</p>}
           {tab === "signin" && (
             <>
               <form onSubmit={submit} noValidate className="stack">
                 <Field id="email" label="Email" type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} err={f.email} />
-                <Field id="password" label="Password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} err={f.password} />
+                <PasswordField id="password" label="Password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} err={f.password} />
                 <button className={"btn btn-block" + (busy ? " busy" : "")} disabled={busy}>Sign in</button>
+                <p className="small"><button type="button" className="linkish" onClick={() => goTab("forgot")}>Forgot password?</button></p>
               </form>
               <div className="auth-demo">
                 <h2 className="h2">Try it as someone</h2>
@@ -104,16 +162,40 @@ export default function Account() {
           {tab === "create" && (
             <form onSubmit={submit} noValidate className="stack">
               <Field id="email" label="Email" type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} err={f.email} />
-              <Field id="password" label="Password" type="password" autoComplete="new-password" required value={password} onChange={e => setPassword(e.target.value)} err={f.password} />
-              <div className="policy" aria-live="polite">
-                <p className="mono policy-head">Password policy</p>
-                <ul>
-                  {policy.results.map(r => <li key={r.id} className={password ? (r.ok ? "met" : "unmet") : ""}><span aria-hidden="true">{r.ok && password ? "✓" : "○"}</span> {r.label}</li>)}
-                </ul>
-                <p className="small muted">Length is what makes a password hard to guess, so there is no capital-and-symbol rule. A few random words work well. {[...password].length} / 15 characters.</p>
-              </div>
+              <PasswordField id="password" label="Password" autoComplete="new-password" required value={password} onChange={e => setPassword(e.target.value)} err={f.password} />
+              <Policy password={password} policy={policy} />
               <button className={"btn btn-block" + (busy ? " busy" : "")} disabled={busy || !policy.ok}>Create account</button>
               <p className="small muted">Passwords are stored as Argon2id hashes. We cannot read yours.</p>
+            </form>
+          )}
+          {tab === "forgot" && (sent ? (
+            <div className="stack">
+              {sent.token ? (
+                <>
+                  <p className="form-ok">Demo engine: no email is sent, so here is your reset token. On the real site it arrives as a link.</p>
+                  <code className="token">{sent.token}</code>
+                  <button className="btn" onClick={() => { setToken(sent.token); setTab("reset"); setSent(null); setState({}); }}>Choose a new password</button>
+                </>
+              ) : (
+                <p className="lead">If <b>{sent.email}</b> has an account, a reset link is on its way. It works once and lasts an hour. Check your spam folder too.</p>
+              )}
+              <p className="small"><button type="button" className="linkish" onClick={() => goTab("signin")}>Back to sign in</button></p>
+            </div>
+          ) : (
+            <form onSubmit={submit} noValidate className="stack">
+              <p className="small muted">Enter the email you signed up with and we will send a link to choose a new password.</p>
+              <Field id="email" label="Email" type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} err={f.email} />
+              <button className={"btn btn-block" + (busy ? " busy" : "")} disabled={busy}>Send reset link</button>
+              <p className="small"><button type="button" className="linkish" onClick={() => goTab("signin")}>Back to sign in</button></p>
+            </form>
+          ))}
+          {tab === "reset" && (
+            <form onSubmit={submit} noValidate className="stack">
+              {!q.get("token") && <Field id="token" label="Reset token" autoComplete="off" spellCheck={false} required value={token} onChange={e => setToken(e.target.value)} err={f.token} hint="From the link in your reset email." />}
+              <PasswordField id="password" label="New password" autoComplete="new-password" required value={password} onChange={e => setPassword(e.target.value)} err={f.password} />
+              <Policy password={password} policy={policy} />
+              <button className={"btn btn-block" + (busy ? " busy" : "")} disabled={busy || !policy.ok}>Change password</button>
+              <p className="small"><button type="button" className="linkish" onClick={() => goTab("signin")}>Back to sign in</button></p>
             </form>
           )}
         </div>

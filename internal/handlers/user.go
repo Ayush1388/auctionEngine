@@ -182,3 +182,48 @@ func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 		httpx.ServerError(w, r, err)
 	}
 }
+
+func (h *UserHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var input user.ForgotPasswordInput
+	if err := httpx.ReadJSON(w, r, &input); err != nil {
+		httpx.BadRequest(w, err)
+		return
+	}
+
+	// Always 204 for a valid email, whether or not it has an account, so this cannot be used to
+	// find out who is registered.
+	err := h.service.ForgotPassword(r.Context(), input)
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, validation.ErrInvalid):
+		httpx.BadRequest(w, err)
+	default:
+		httpx.ServerError(w, r, err)
+	}
+}
+
+func (h *UserHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var input user.ResetPasswordInput
+	if err := httpx.ReadJSON(w, r, &input); err != nil {
+		httpx.BadRequest(w, err)
+		return
+	}
+
+	userID, err := h.service.ResetPassword(r.Context(), input)
+	switch {
+	case err == nil:
+		// A new password ends every session that was signed in with the old one.
+		if rerr := h.sessions.RevokeAll(r.Context(), userID); rerr != nil {
+			httpx.ServerError(w, r, rerr)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, validation.ErrInvalid):
+		httpx.BadRequest(w, err)
+	case errors.Is(err, user.ErrInvalidResetToken):
+		httpx.Error(w, http.StatusBadRequest, "this reset link is invalid or has expired")
+	default:
+		httpx.ServerError(w, r, err)
+	}
+}

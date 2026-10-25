@@ -275,3 +275,61 @@ func TestRegisterRejectsWeakPassword(t *testing.T) {
 		t.Fatal("a password containing the email name must be rejected")
 	}
 }
+
+func TestForgotAndResetPassword(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	jwt := user.NewJWTService("0123456789abcdef0123456789abcdef", "test", time.Hour)
+	service := user.NewService(pool, user.NewRepository(pool), jwt).RequireActivation(false)
+
+	if _, err := service.Register(ctx, user.RegisterInput{Email: "dana@example.com", Password: testPassword}); err != nil {
+		t.Fatal(err)
+	}
+
+	// An unknown address looks the same and queues nothing.
+	if err := service.ForgotPassword(ctx, user.ForgotPasswordInput{Email: "nobody@example.com"}); err != nil {
+		t.Fatalf("unknown email must succeed silently: %v", err)
+	}
+	var queued int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_type = 'email.password_reset'`).Scan(&queued); err != nil || queued != 0 {
+		t.Fatalf("nothing should be queued for an unknown email: %d, %v", queued, err)
+	}
+
+	if err := service.ForgotPassword(ctx, user.ForgotPasswordInput{Email: "dana@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	var payload []byte
+	if err := pool.QueryRow(ctx, `SELECT payload FROM outbox_events WHERE event_type = 'email.password_reset'`).Scan(&payload); err != nil {
+		t.Fatalf("expected a reset email event: %v", err)
+	}
+	var ev struct {
+		To         string `json:"to"`
+		ResetToken string `json:"reset_token"`
+	}
+	if err := json.Unmarshal(payload, &ev); err != nil || ev.ResetToken == "" || ev.To != "dana@example.com" {
+		t.Fatalf("bad reset event %s: %v", payload, err)
+	}
+
+	// The new password has to meet the policy, and a bad attempt does not burn the link.
+	if _, err := service.ResetPassword(ctx, user.ResetPasswordInput{Token: ev.ResetToken, Password: "dana-is-my-password"}); err == nil {
+		t.Fatal("a weak new password must be rejected")
+	}
+	const fresh = "a-brand-new-long-passphrase"
+	if _, err := service.ResetPassword(ctx, user.ResetPasswordInput{Token: ev.ResetToken, Password: fresh}); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	if _, err := service.Login(ctx, user.LoginInput{Email: "dana@example.com", Password: fresh}); err != nil {
+		t.Fatalf("login with the new password: %v", err)
+	}
+	if _, err := service.Login(ctx, user.LoginInput{Email: "dana@example.com", Password: testPassword}); !errors.Is(err, user.ErrInvalidCredentials) {
+		t.Fatalf("the old password must stop working, got %v", err)
+	}
+
+	// A link works once.
+	if _, err := service.ResetPassword(ctx, user.ResetPasswordInput{Token: ev.ResetToken, Password: "yet-another-long-passphrase"}); !errors.Is(err, user.ErrInvalidResetToken) {
+		t.Fatalf("a used link must be refused, got %v", err)
+	}
+	if _, err := service.ResetPassword(ctx, user.ResetPasswordInput{Token: "not-a-real-token", Password: fresh}); !errors.Is(err, user.ErrInvalidResetToken) {
+		t.Fatalf("an unknown link must be refused, got %v", err)
+	}
+}

@@ -149,6 +149,7 @@ On the hosted demo (no API) the same page drives the demo engine's modelled faul
 - Proxy bidding is covered by Go integration tests (`internal/bidding/proxy_test.go`) that need `TEST_DATABASE_URL`; they skip without it.
 - Type-ahead (`/suggest`) is Elasticsearch-only on the API. Without Elasticsearch the page falls back to matching the open lots' titles in the browser.
 - Search without Elasticsearch has no typo tolerance; the page says which backend answered.
+- Forgot password: the Account page's reset screen. On the real API the link arrives by email (it opens `/account?tab=reset&token=...` on the site, built from `APP_BASE_URL`, so SMTP must work); on the demo engine no email is sent and the token is shown on screen.
 - Creating an account signs you in straight away: there is no activation email. The password policy is in `app/passwordPolicy.js` (the API enforces the same rules in `internal/user/password_policy.go`).
 - Tokens live in `sessionStorage`: they are readable by script on the page. That is a known trade-off for a token-in-header API; the API sets a strict CSP on its own responses.
 - `Server-Timing` splits a bid into lock, rules, write and commit when bidding runs in the API process. With the bidding service split out over gRPC the gateway reports the whole call as one step.

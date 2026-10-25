@@ -91,6 +91,25 @@ export class World {
     return { ...this.#issue(u), user: { id: u.id, email: u.email, activated_at: u.activated_at } };
   }
 
+  /** Forgot password: a link that works once. Returns the token so the demo can show it (no email is sent). */
+  forgotPassword(email) {
+    if (!/^[^@s]+@[^@s]+.[^@s]+$/.test(email || "")) throw new SimError(400, "invalid input", { fields: { email: "must be a valid email address" } });
+    const u = this.users.get(this.emails.get(email.toLowerCase()));
+    if (!u) return null;                       // the real API answers the same either way
+    u.resetToken = "rst_" + uuid().replace(/-/g, ""); u.resetExpires = this.now() + 3600 * 1000;
+    return u.resetToken;
+  }
+
+  resetPassword(token, password) {
+    const u = [...this.users.values()].find(x => x.resetToken && x.resetToken === (token || "").trim() && x.resetExpires > this.now());
+    if (!u) throw new SimError(400, "this reset link is invalid or has expired");
+    const pw = checkPassword(password || "", u.email);
+    if (!pw.ok) throw new SimError(400, "invalid input", { fields: { password: pw.message } });
+    u.password = password; u.resetToken = null; u.resetExpires = 0;
+    for (const [t, v] of this.refreshTokens) if (v.userId === u.id) this.refreshTokens.delete(t);   // signs the other sessions out
+    return { ok: true };
+  }
+
   /** Swap a refresh token for new tokens. A token used twice revokes the whole session, like the server. */
   refresh(refreshToken) {
     const r = this.refreshTokens.get(refreshToken);

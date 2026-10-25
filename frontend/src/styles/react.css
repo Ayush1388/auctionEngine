@@ -20,3 +20,10 @@
 .policy li.met { opacity: 1; color: var(--ok, #1f7a4d); }
 .policy li.unmet { opacity: 1; color: var(--red, #AD221D); }
 .policy .small { margin: 0; }
+
+/* show / hide on password fields */
+.pw { position: relative; }
+.pw input { width: 100%; padding-right: 76px; }
+.pw-toggle { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--red, #AD221D); font: 500 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.pw-toggle:hover { background: rgba(173, 34, 29, .08); }
+.pw-toggle:focus-visible { outline: 2px solid var(--red, #AD221D); outline-offset: 1px; }

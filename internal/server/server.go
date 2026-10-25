@@ -117,6 +117,8 @@ func routes(d Deps) []Route {
 		{"POST", "/v1/users/register", authLimited(d.Users.Register)},
 		{"GET", "/v1/users/activate", authLimited(d.Users.Activate)},
 		{"POST", "/v1/users/resend-activation", authLimited(d.Users.ResendActivation)},
+		{"POST", "/v1/users/forgot-password", authLimited(d.Users.ForgotPassword)},
+		{"POST", "/v1/users/reset-password", authLimited(d.Users.ResetPassword)},
 		{"POST", "/v1/users/login", authLimited(d.Users.Login)},
 		{"GET", "/v1/users/me", protected(d.Users.Me)},
 		{"POST", "/v1/auth/refresh", authLimited(d.Sessions.Refresh)},

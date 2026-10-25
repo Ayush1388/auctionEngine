@@ -31,6 +31,16 @@ func (h *EventHandler) Handle(
 	case EventTypeActivationEmail:
 		return h.handleActivationEmail(ctx, event)
 
+	case EventTypePasswordReset:
+		var payload PasswordResetEvent
+		if err := outbox.DecodePayload(event, &payload); err != nil {
+			return err
+		}
+		if payload.To == "" || payload.ResetToken == "" {
+			return fmt.Errorf("password reset email is missing its recipient or token")
+		}
+		return h.service.SendPasswordResetEmail(ctx, payload.To, payload.ResetToken)
+
 	default:
 		return fmt.Errorf(
 			"unknown outbox event type: %s",
