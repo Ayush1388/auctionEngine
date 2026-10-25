@@ -153,7 +153,11 @@ func (b *Bots) Seed(ctx context.Context, opt SeedOptions) (SeedResult, error) {
 	}
 	raw, err := os.ReadFile(opt.Catalog)
 	if err != nil {
-		return SeedResult{}, err
+		// In the Docker image the catalogue sits next to the binary, not under frontend/.
+		var alt error
+		if raw, alt = os.ReadFile("/app/catalog.json"); alt != nil {
+			return SeedResult{}, fmt.Errorf("demo catalogue not found at %s or /app/catalog.json: %w", opt.Catalog, err)
+		}
 	}
 	var cat catalog
 	if err := json.Unmarshal(raw, &cat); err != nil {
