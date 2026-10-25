@@ -207,6 +207,8 @@ test("forgot password: a link that works once, the password policy, and other se
   w.register("r@x.test", "a-long-enough-password");
   const old = w.login("r@x.test", "a-long-enough-password");
   assert.equal(w.forgotPassword("nobody@x.test"), null);            // same answer as the real API: no hint
+  assert.equal(w.forgotPassword("ayushji2543@gmail.com"), null);    // a valid address with an "s" in it is not an error
+  rejects(() => w.forgotPassword("not-an-email"), 400);
   const token = w.forgotPassword("r@x.test");
   assert.ok(token);
   rejects(() => w.resetPassword("nope", "another-long-password-1"), 400, /invalid or has expired/);

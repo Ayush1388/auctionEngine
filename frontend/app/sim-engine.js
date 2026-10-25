@@ -93,7 +93,7 @@ export class World {
 
   /** Forgot password: a link that works once. Returns the token so the demo can show it (no email is sent). */
   forgotPassword(email) {
-    if (!/^[^@s]+@[^@s]+.[^@s]+$/.test(email || "")) throw new SimError(400, "invalid input", { fields: { email: "must be a valid email address" } });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email || "")) throw new SimError(400, "invalid input", { fields: { email: "must be a valid email address" } });
     const u = this.users.get(this.emails.get(email.toLowerCase()));
     if (!u) return null;                       // the real API answers the same either way
     u.resetToken = "rst_" + uuid().replace(/-/g, ""); u.resetExpires = this.now() + 3600 * 1000;
